@@ -8,7 +8,7 @@ import { formatSize } from "@/lib/format.js";
 const IMAGE_TYPES = ["image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp"];
 const BLOCKED = [".exe", ".msi", ".bat", ".cmd", ".com", ".scr", ".pif"];
 
-export default function UploadZone({ screenshots, files, onChange, maxTotal = 10 * 1024 * 1024, maxShots = 5, maxFiles = 5, compact = false }) {
+export default function UploadZone({ screenshots, files, onChange, maxTotal = 10 * 1024 * 1024, maxShots = 5, maxFiles = 5, compact = false, hideDrop = false }) {
   const [drag, setDrag] = useState(false);
   const inputRef = useRef(null);
 
@@ -45,6 +45,7 @@ export default function UploadZone({ screenshots, files, onChange, maxTotal = 10
 
   return (
     <div>
+      {!hideDrop && (
       <div
         onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
         onDragLeave={(e) => { e.preventDefault(); setDrag(false); }}
@@ -70,6 +71,7 @@ export default function UploadZone({ screenshots, files, onChange, maxTotal = 10
         )}
         <input ref={inputRef} type="file" multiple hidden onChange={(e) => { add(e.target.files); e.target.value = ""; }} />
       </div>
+      )}
 
       {screenshots.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-2">

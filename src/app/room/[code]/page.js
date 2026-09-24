@@ -3,46 +3,49 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { Clock, Copy, Download, Eye, ImagePlus, Paperclip, Plus, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCheck, Download, FileText, Plus } from "lucide-react";
 import { toast } from "react-toastify";
 import api, { downloadUrl } from "@/lib/api.js";
+import { addIncoming } from "@/lib/attach.js";
+import { isOwn, markOwn } from "@/lib/device.js";
 import { copyText, formatSize, formatTTL, timeRemaining } from "@/lib/format.js";
+import CodeBlock from "@/components/CodeBlock.jsx";
+import Composer from "@/components/Composer.jsx";
 import Lightbox from "@/components/Lightbox.jsx";
-import UploadZone from "@/components/UploadZone.jsx";
 
 const POLL_MS = 10000;
+const time = (d) => new Date(d).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+const day = (d) => new Date(d).toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" });
 
 export default function RoomPage() {
   const { code } = useParams();
   const [room, setRoom] = useState(null);
-  const [error, setError] = useState(null);
-  const [showForm, setShowForm] = useState(false);
+  const [error, setError] = useState("");
   const [title, setTitle] = useState("");
   const [entryCode, setEntryCode] = useState("");
   const [screenshots, setScreenshots] = useState([]);
   const [files, setFiles] = useState([]);
   const [adding, setAdding] = useState(false);
-  const [expanded, setExpanded] = useState({});
   const [lightbox, setLightbox] = useState(null);
   const timer = useRef(null);
+  const bottomRef = useRef(null);
 
   const load = useCallback(async (silent = false) => {
     if (!code) return;
     try {
       const res = await api.getRoom(code);
+      if (!res?.data?.code) throw new Error("Bad room response");
       setRoom(res.data);
-      setError(null);
+      setError("");
     } catch (e) {
-      if (!silent) {
-        setError(e.message);
-        toast.error("Failed to load room");
-      }
+      console.error("Load room failed:", e);
+      if (!silent) setError(e?.message || "Failed to load room");
     }
   }, [code]);
 
   useEffect(() => {
     setRoom(null);
-    setError(null);
+    setError("");
     load();
     timer.current = setInterval(() => { if (!document.hidden) load(true); }, POLL_MS);
     const onFocus = () => load(true);
@@ -50,22 +53,45 @@ export default function RoomPage() {
     return () => { clearInterval(timer.current); window.removeEventListener("focus", onFocus); };
   }, [code, load]);
 
-  const addEntry = async () => {
+  const onFiles = (incoming) => {
+    const cap = room ? Math.min(10 * 1024 * 1024, Math.max(0, room.maxSize - room.totalSize)) : 10 * 1024 * 1024;
+    const next = addIncoming(screenshots, files, incoming, { maxTotal: cap });
+    setScreenshots(next.screenshots);
+    setFiles(next.files);
+  };
+
+  const send = async () => {
     if (!entryCode.trim() && screenshots.length === 0 && files.length === 0) {
-      return toast.error("Add code, screenshots, or files");
+      toast.error("Type something or attach a file first");
+      return;
     }
+    const tempId = `temp-${Date.now()}`;
+    const temp = {
+      id: tempId,
+      title: title || "Untitled",
+      code: entryCode.trim(),
+      entrySize: [...screenshots, ...files].reduce((s, f) => s + f.size, 0),
+      screenshots: screenshots.map((f) => ({ name: f.name, size: f.size })),
+      files: files.map((f) => ({ name: f.name, size: f.size })),
+      createdAt: new Date().toISOString(),
+      _sending: true,
+    };
+    setRoom((prev) => (prev ? { ...prev, entries: [temp, ...prev.entries] } : prev));
     setAdding(true);
     try {
-      await api.addRoomEntry(code, { code: entryCode.trim(), title: title || "Untitled" }, screenshots, files);
-      toast.success("Entry added!");
+      const res = await api.addRoomEntry(code, { code: entryCode.trim(), title: title || "Untitled" }, screenshots, files);
+      if (!res?.success) throw new Error("Server rejected entry");
+      if (res?.data?.id) markOwn(res.data.id);
       setTitle("");
       setEntryCode("");
       setScreenshots([]);
       setFiles([]);
-      setShowForm(false);
       await load();
+      requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }));
     } catch (e) {
-      toast.error(e.message);
+      console.error("Add entry failed:", e);
+      toast.error(e?.message || "Could not send");
+      setRoom((prev) => (prev ? { ...prev, entries: prev.entries.filter((x) => x.id !== tempId) } : prev));
     } finally {
       setAdding(false);
     }
@@ -73,190 +99,158 @@ export default function RoomPage() {
 
   if (error) {
     return (
-      <div className="rise py-16 text-center">
-        <h1 className="mb-2 text-2xl font-bold" style={{ color: "var(--foreground)" }}>Room not found</h1>
-        <p className="mb-4 text-sm" style={{ color: "var(--muted-foreground)" }}>{error}</p>
-        <Link href="/" className="inline-flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium" style={{ backgroundColor: "var(--primary-color)", color: "#fff", textDecoration: "none" }}>
-          <Plus className="h-4 w-4" /> Home
-        </Link>
+      <div className="rise mx-auto w-full max-w-md py-14">
+        <div className="chat">
+          <div className="bubble bubble-in" style={{ borderColor: "var(--danger-color)", maxWidth: "100%" }}>
+            <div className="flex items-start gap-2 text-sm">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "var(--danger-color)" }} />
+              <span>{error} — check the 6-character code or expiry.</span>
+            </div>
+          </div>
+          <Link href="/" className="btn btn-primary mx-auto"><Plus className="h-4 w-4" /> Home</Link>
+        </div>
       </div>
     );
   }
 
   if (!room) {
     return (
-      <div className="flex items-center justify-center py-24">
+      <div className="flex items-center justify-center py-24" role="status" aria-label="Loading">
         <div className="h-10 w-10 animate-spin rounded-full border-b-2" style={{ borderColor: "var(--primary-color)" }} />
       </div>
     );
   }
 
   const pct = Math.min(100, (room.totalSize / room.maxSize) * 100);
-  const roomRemaining = room.maxSize - room.totalSize;
+  const totalSel = [...screenshots, ...files].reduce((s, f) => s + f.size, 0);
 
   return (
-    <div className="rise space-y-4">
-      <section className="rounded-lg p-4 sm:p-5" style={{ backgroundColor: "var(--card-bg)", border: "1px solid var(--border-color)", boxShadow: "var(--shadow)" }}>
-        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h1 className="truncate text-xl font-bold" style={{ color: "var(--foreground)" }}>{room.name}</h1>
-            <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm" style={{ color: "var(--muted-foreground)" }}>
-              <code className="rounded px-2 py-0.5 font-mono" style={{ backgroundColor: "var(--input-bg)", border: "1px solid var(--border-color)" }}>{room.code}</code>
-              <button onClick={() => copyText(room.code, "Room code copied!")} className="transition-colors hover:underline" style={{ color: "var(--primary-color)", cursor: "pointer" }}>Copy</button>
-              <span className="inline-flex items-center gap-1"><Clock className="h-3.5 w-3.5" />{timeRemaining(room.expiresAt)}</span>
-              <span className="rounded px-1.5 py-0.5 text-xs" style={{ backgroundColor: "var(--secondary-color)", border: "1px solid var(--border-color)" }}>{formatTTL(room.ttlHours)}</span>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <Link href="/" className="inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm" style={{ backgroundColor: "var(--secondary-color)", color: "var(--foreground)", border: "1px solid var(--border-color)", textDecoration: "none" }}>
-              <X className="h-4 w-4" /> Leave
-            </Link>
-            <button onClick={() => setShowForm((s) => !s)} className="inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium" style={{ backgroundColor: "var(--primary-color)", color: "#fff", border: "none", cursor: "pointer" }}>
-              <Plus className="h-4 w-4" /> Entry
-            </button>
-          </div>
+    <div className="rise space-y-3">
+      <section className="card flex flex-wrap items-center gap-2 p-3 sm:p-4">
+        <Link href="/" className="icon-btn shrink-0" aria-label="Back home" title="Back">
+          <ArrowLeft className="h-5 w-5" />
+        </Link>
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg font-bold" style={{ backgroundColor: "var(--secondary-hover)", color: "var(--accent-color)" }}>
+          {(room.name || "R").slice(0, 1).toUpperCase()}
+        </span>
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-base font-bold sm:text-lg" style={{ color: "var(--foreground)" }}>{room.name}</h1>
+          <button type="button" onClick={() => copyText(room.code, "Room code copied!")} className="mono text-xs muted underline" style={{ cursor: "pointer" }} title="Copy room code">
+            {room.code} · tap to copy
+          </button>
         </div>
-        <div>
-          <div className="mb-1 flex justify-between text-xs" style={{ color: "var(--muted-foreground)" }}>
-            <span>{formatSize(room.totalSize)} / {formatSize(room.maxSize)} used</span>
-            <span>{pct.toFixed(1)}%</span>
+        <div className="flex w-full flex-col gap-1 sm:w-44">
+          <div className="flex justify-between text-[11px] muted">
+            <span>{formatSize(room.totalSize)} / {formatSize(room.maxSize)}</span>
+            <span>{timeRemaining(room.expiresAt)}</span>
           </div>
-          <div className="h-2 overflow-hidden rounded-full" style={{ backgroundColor: "var(--input-bg)" }}>
+          <div className="h-1.5 overflow-hidden rounded-full" style={{ backgroundColor: "var(--input-bg)" }}>
             <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: pct > 90 ? "var(--danger-color)" : "var(--primary-color)" }} />
           </div>
         </div>
       </section>
 
-      {showForm && (
-        <section className="rise space-y-3 rounded-lg p-4 sm:p-5" style={{ backgroundColor: "var(--card-bg)", border: "1px solid var(--border-color)", boxShadow: "var(--shadow)" }}>
-          <h2 className="font-semibold" style={{ color: "var(--foreground)" }}>New entry</h2>
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Title (optional)"
-            maxLength={100}
-            className="w-full rounded-md px-3 py-2 text-sm focus:outline-none"
-            style={{ backgroundColor: "var(--input-bg)", border: "1px solid var(--border-color)", color: "var(--foreground)" }}
-          />
-          <textarea
-            value={entryCode}
-            onChange={(e) => setEntryCode(e.target.value)}
-            placeholder="Paste code here…"
-            maxLength={100000}
-            rows={7}
-            className="w-full resize-y rounded-md p-3 font-mono text-sm focus:outline-none"
-            style={{ backgroundColor: "var(--input-bg)", border: "1px solid var(--border-color)", color: "var(--foreground)" }}
-          />
-          <UploadZone
-            screenshots={screenshots}
-            files={files}
-            onChange={({ screenshots: ss, files: ff }) => { setScreenshots(ss); setFiles(ff); }}
-            maxTotal={Math.min(10 * 1024 * 1024, Math.max(0, roomRemaining))}
-            compact
-          />
-          <div className="flex items-center justify-between">
-            <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>{formatSize(roomRemaining)} room space left</span>
-            <button onClick={addEntry} disabled={adding} className="rounded-md px-4 py-2 text-sm font-medium" style={{ backgroundColor: adding ? "var(--muted-foreground)" : "var(--primary-color)", color: "#fff", border: "none", cursor: adding ? "not-allowed" : "pointer" }}>
-              {adding ? "Adding…" : "Submit entry"}
-            </button>
-          </div>
-        </section>
-      )}
-
-      {room.entries.length === 0 && !showForm ? (
-        <div className="py-12 text-center" style={{ color: "var(--muted-foreground)" }}>
-          <p className="mb-1 text-lg">No entries yet</p>
-          <p className="text-sm">Click “Entry” to share something in this room.</p>
+      <div className="chat">
+        <div className="date-chip">{day(room.createdAt)}</div>
+        <div className="notice">
+          Room <span className="mono font-bold">{room.code}</span> · {room.entries.length} messages · {formatTTL(room.ttlHours)} life · yours appear on the right
         </div>
-      ) : (
-        <div className="space-y-3">
-          {room.entries.map((entry) => (
-            <article key={entry.id} className="space-y-3 rounded-lg p-4 sm:p-5" style={{ backgroundColor: "var(--card-bg)", border: "1px solid var(--border-color)", boxShadow: "var(--shadow)" }}>
-              <div className="flex flex-wrap items-baseline justify-between gap-1">
-                <h3 className="truncate font-medium" style={{ color: "var(--foreground)" }}>{entry.title}</h3>
-                <span className="shrink-0 text-xs" style={{ color: "var(--muted-foreground)" }}>
-                  {new Date(entry.createdAt).toLocaleString()}{entry.entrySize > 0 && ` · ${formatSize(entry.entrySize)}`}
-                </span>
-              </div>
 
+        {room.entries.length === 0 && (
+          <div className="notice">No messages yet — say hello below.</div>
+        )}
+
+        {room.entries.map((entry) => {
+          const own = entry._sending || isOwn(entry.id);
+          return (
+            <div key={entry.id} className={`bubble ${own ? "bubble-out" : "bubble-in"}`} style={entry._sending ? { opacity: 0.75 } : undefined}>
+              {!own && <div className="bubble-name">{entry.title}</div>}
+              {own && entry.title && entry.title !== "Untitled" && (
+                <div className="bubble-name" style={{ color: "inherit", opacity: 0.8 }}>{entry.title}</div>
+              )}
               {entry.code && (
-                <div className="relative">
-                  <div
-                    onClick={() => setExpanded((p) => ({ ...p, [entry.id]: !p[entry.id] }))}
-                    className="cursor-pointer rounded-md transition-colors"
-                    style={{ backgroundColor: "var(--input-bg)", border: "1px solid var(--border-color)" }}
-                  >
-                    {expanded[entry.id] ? (
-                      <pre className="overflow-auto p-3 font-mono text-sm" style={{ color: "var(--foreground)", maxHeight: 500, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-                        <code>{entry.code}</code>
-                      </pre>
-                    ) : (
-                      <div className="flex items-center gap-2 px-3 py-2.5">
-                        <code className="flex-1 truncate font-mono text-sm" style={{ color: "var(--foreground)" }}>{entry.code.split("\n")[0]}</code>
-                        <Eye className="h-4 w-4 shrink-0" style={{ color: "var(--muted-foreground)" }} />
-                      </div>
-                    )}
-                  </div>
-                  <button onClick={() => copyText(entry.code, "Copied!")} className="absolute right-2 top-2 rounded-md p-1.5" style={{ backgroundColor: "var(--secondary-color)", border: "1px solid var(--border-color)", color: "var(--foreground)", cursor: "pointer" }} aria-label="Copy entry code">
-                    <Copy className="h-3.5 w-3.5" />
-                  </button>
+                <div className="mt-1"><CodeBlock code={entry.code} /></div>
+              )}
+              {!entry._sending && entry.screenshots?.map((s, i) => (
+                <div key={`s-${i}`} className="mt-1.5">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={api.roomScreenshotUrl(room.code, entry.id, i)}
+                    alt={s.name}
+                    loading="lazy"
+                    onClick={() => setLightbox({ entryId: entry.id, index: i, name: s.name })}
+                    className="w-full cursor-pointer rounded-lg object-cover"
+                    style={{ maxHeight: 320 }}
+                  />
+                </div>
+              ))}
+              {!entry._sending && entry.files?.map((f, i) => (
+                <button
+                  key={`f-${i}`}
+                  type="button"
+                  onClick={() => downloadUrl(api.roomFileUrl(room.code, entry.id, i), f.name).catch(() => toast.error("Download failed"))}
+                  className="mt-1.5 flex w-full items-center gap-2.5 rounded-lg p-2 text-left"
+                  style={{ backgroundColor: "rgba(0,0,0,0.22)", cursor: "pointer" }}
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full" style={{ backgroundColor: "rgba(0,0,0,0.3)" }}>
+                    <FileText className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium">{f.name}</span>
+                    <span className="block text-xs" style={{ opacity: 0.75 }}>{formatSize(f.size)} · tap to save</span>
+                  </span>
+                  <Download className="h-4 w-4 shrink-0" style={{ opacity: 0.75 }} />
+                </button>
+              ))}
+              {entry._sending && (entry.screenshots.length > 0 || entry.files.length > 0) && (
+                <div className="mt-1.5 text-xs" style={{ opacity: 0.8 }}>
+                  Uploading: {[...entry.screenshots, ...entry.files].map((f) => f.name).join(", ")}
                 </div>
               )}
-
-              {entry.screenshots?.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {entry.screenshots.map((s, i) => (
-                    <div key={i} className="group relative" style={{ width: 120, height: 90 }}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={api.roomScreenshotUrl(room.code, entry.id, i)}
-                        alt={s.name}
-                        loading="lazy"
-                        onClick={() => setLightbox({ entryId: entry.id, index: i, name: s.name })}
-                        className="h-full w-full cursor-pointer rounded object-cover transition-opacity hover:opacity-80"
-                        style={{ border: "1px solid var(--border-color)" }}
-                      />
-                      <button
-                        onClick={() => downloadUrl(api.roomScreenshotUrl(room.code, entry.id, i), s.name).catch(() => toast.error("Download failed"))}
-                        className="absolute bottom-1 right-1 rounded p-1 opacity-0 transition-opacity group-hover:opacity-100"
-                        style={{ backgroundColor: "rgba(0,0,0,0.7)", color: "#fff", cursor: "pointer" }}
-                        aria-label="Download screenshot"
-                      >
-                        <Download className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {entry.files?.length > 0 && (
-                <div className="space-y-1">
-                  {entry.files.map((f, i) => (
-                    <div key={i} className="flex items-center justify-between rounded px-3 py-2 text-sm" style={{ backgroundColor: "var(--input-bg)", border: "1px solid var(--border-color)" }}>
-                      <div className="flex min-w-0 items-center gap-2">
-                        <Paperclip className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--muted-foreground)" }} />
-                        <span className="truncate" style={{ color: "var(--foreground)" }}>{f.name}</span>
-                        <span className="shrink-0 text-xs" style={{ color: "var(--muted-foreground)" }}>{formatSize(f.size)}</span>
-                      </div>
-                      <button
-                        onClick={() => downloadUrl(api.roomFileUrl(room.code, entry.id, i), f.name).catch(() => toast.error("Download failed"))}
-                        className="ml-2 inline-flex shrink-0 items-center gap-1 rounded px-2.5 py-1 text-xs font-medium"
-                        style={{ backgroundColor: "var(--primary-color)", color: "#fff", border: "none", cursor: "pointer" }}
-                      >
-                        <Download className="h-3 w-3" /> Download
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </article>
-          ))}
-        </div>
-      )}
-
-      <div className="rounded-lg p-4 text-sm" style={{ backgroundColor: "var(--card-bg)", border: "1px solid var(--border-color)", color: "var(--muted-foreground)" }}>
-        Created {new Date(room.createdAt).toLocaleString()} · Expires {new Date(room.expiresAt).toLocaleString()} · {room.entries.length} entries · refreshes every 10s
+              <div className="bubble-meta">
+                {entry._sending ? (
+                  <span>Sending…</span>
+                ) : (
+                  <>
+                    {entry.entrySize > 0 && <span>{formatSize(entry.entrySize)}</span>}
+                    <span>{time(entry.createdAt)}</span>
+                    {own && <CheckCheck className="h-3.5 w-3.5" />}
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })}
+        <div ref={bottomRef} />
       </div>
+
+      <div className="flex items-center gap-2">
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="Name this message (optional)"
+          maxLength={100}
+          className="field"
+          aria-label="Message title"
+        />
+        {totalSel > 0 && <span className="chip shrink-0">{formatSize(totalSel)}</span>}
+      </div>
+
+      <Composer
+        value={entryCode}
+        onChange={setEntryCode}
+        onSend={send}
+        sending={adding}
+        sendLabel="Send to room"
+        placeholder="Message… Enter to send, Shift+Enter new line"
+        screenshots={screenshots}
+        files={files}
+        onFiles={onFiles}
+        maxTotal={Math.min(10 * 1024 * 1024, Math.max(0, room.maxSize - room.totalSize))}
+        attachIdPrefix="room"
+      />
+
+      <p className="text-center text-xs muted">Created {new Date(room.createdAt).toLocaleString()} · auto-refresh 10s</p>
 
       {lightbox && (
         <Lightbox

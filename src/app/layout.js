@@ -7,15 +7,20 @@ export const metadata = {
   description: "Paste code, get a short ID, share with friends. Links expire automatically.",
 };
 
+const themeInit = `(function(){try{var t=localStorage.getItem("pasty-theme");if(t==="light"||t==="ocean")document.documentElement.dataset.theme=t;else document.documentElement.dataset.theme="dark";}catch(e){document.documentElement.dataset.theme="dark";}})();`;
+
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
+    <html lang="en" data-theme="dark" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInit }} />
+      </head>
       <body>
         <Navbar />
-        <main className="mx-auto w-full max-w-5xl px-4 py-6">{children}</main>
-        <footer className="mx-auto w-full max-w-5xl px-4 pb-8 text-center text-xs" style={{ color: "var(--muted-foreground)" }}>
+        <main className="wrap" style={{ maxWidth: "56rem" }}>{children}</main>
+        <footer className="wrap text-center text-xs muted" style={{ maxWidth: "56rem", paddingTop: 0 }}>
           Pasty · links expire automatically ·{" "}
-          <a href="/api/health" style={{ color: "var(--muted-foreground)" }}>
+          <a href="/api/health" className="muted">
             health
           </a>
         </footer>

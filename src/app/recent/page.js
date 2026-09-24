@@ -1,67 +1,90 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Search } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, Clock3, Search } from "lucide-react";
 import { toast } from "react-toastify";
 import api from "@/lib/api.js";
-import { extractId } from "@/lib/format.js";
+import { extractId, timeRemaining } from "@/lib/format.js";
 
 export default function SearchPage() {
   const router = useRouter();
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
+  const [latest, setLatest] = useState([]);
+  const [latestError, setLatestError] = useState("");
+
+  useEffect(() => {
+    api.listGists(1, 10).then((r) => setLatest(r.data || [])).catch((e) => setLatestError(e.message));
+  }, []);
 
   const search = async () => {
     const id = extractId(value);
-    if (id.length !== 4) return toast.error("Enter a 4-character paste ID");
+    if (id.length !== 4) {
+      toast.error("Enter a 4-character ID or paste a full link");
+      return;
+    }
     setBusy(true);
     try {
       const res = await api.searchGist(id);
+      if (!res?.data?.id) throw new Error("Not found");
       router.push(`/code/${res.data.id}`);
-    } catch {
-      toast.error("Paste not found or expired");
+    } catch (e) {
+      console.error("Search failed:", e);
+      toast.error(e?.message || "Paste not found or expired");
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <div className="rise space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-2">
-        <div>
-          <h1 className="text-2xl font-bold" style={{ color: "var(--foreground)" }}>Find a paste</h1>
-          <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>Enter the 4-character ID or paste a full link.</p>
-        </div>
-        <button
-          onClick={() => router.push("/")}
-          className="inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm transition-colors"
-          style={{ backgroundColor: "var(--secondary-color)", color: "var(--foreground)", border: "1px solid var(--border-color)", cursor: "pointer" }}
-        >
-          <ArrowLeft className="h-4 w-4" /> New paste
-        </button>
+    <div className="rise mx-auto w-full max-w-2xl space-y-5">
+      <div className="text-center">
+        <h1 className="text-xl font-extrabold sm:text-2xl" style={{ color: "var(--foreground)" }}>Open a paste</h1>
+        <p className="text-sm muted">Type the 4-character ID or paste the whole link — both work.</p>
       </div>
 
-      <section className="rounded-lg p-4 sm:p-5" style={{ backgroundColor: "var(--card-bg)", border: "1px solid var(--border-color)", boxShadow: "var(--shadow)" }}>
-        <div className="flex gap-2">
+      <section className="card p-4 sm:p-5">
+        <div className="flex flex-col gap-2 sm:flex-row">
           <input
             value={value}
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && search()}
-            placeholder="e.g. a3f9 or https://…/code/a3f9"
+            placeholder="a3f9  or  https://your-app/code/a3f9"
             autoFocus
-            className="w-full rounded-md px-3 py-2 font-mono text-sm focus:outline-none"
-            style={{ backgroundColor: "var(--input-bg)", border: "1px solid var(--border-color)", color: "var(--foreground)" }}
+            className="field mono"
+            aria-label="Paste ID or link"
           />
-          <button
-            onClick={search}
-            disabled={busy}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition-colors"
-            style={{ backgroundColor: busy ? "var(--muted-foreground)" : "var(--primary-color)", color: "#fff", border: "none", cursor: busy ? "not-allowed" : "pointer" }}
-          >
-            <Search className="h-4 w-4" /> {busy ? "…" : "Search"}
+          <button type="button" onClick={search} disabled={busy} className="btn btn-primary sm:w-auto">
+            <Search className="h-4 w-4" /> {busy ? "…" : "Open"}
           </button>
         </div>
+        <p className="mt-2 text-xs muted">Links look like <span className="mono">/code/a3f9</span> — the last 4 characters are the ID.</p>
+      </section>
+
+      <section className="card p-4 sm:p-5">
+        <h2 className="mb-3 text-sm font-bold uppercase tracking-wider muted">Latest pastes</h2>
+        {latestError ? (
+          <p className="text-sm muted">Could not load list: {latestError}</p>
+        ) : latest.length === 0 ? (
+          <p className="text-sm muted">No pastes yet — create the first one.</p>
+        ) : (
+          <ul className="divide-y" style={{ borderColor: "var(--border-color)" }}>
+            {latest.map((g) => (
+              <li key={g.id}>
+                <Link href={`/code/${g.id}`} className="flex items-center gap-2 py-2.5" style={{ textDecoration: "none", color: "var(--foreground)" }}>
+                  <span className="chip mono">{g.id}</span>
+                  <span className="min-w-0 flex-1 truncate text-sm">{g.title || "Untitled"}</span>
+                  <span className="hidden shrink-0 items-center gap-1 text-xs muted sm:inline-flex">
+                    <Clock3 className="h-3 w-3" />{timeRemaining(g.expiresAt)}
+                  </span>
+                  <ArrowRight className="h-4 w-4 shrink-0" style={{ color: "var(--primary-color)" }} />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
     </div>
   );
