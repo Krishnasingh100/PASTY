@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowRight, Clock3, Search } from "lucide-react";
+import { ArrowRight, Clock3, Search, Users } from "lucide-react";
 import { toast } from "react-toastify";
 import api from "@/lib/api.js";
 import { extractId, timeRemaining } from "@/lib/format.js";
@@ -12,6 +12,8 @@ export default function SearchPage() {
   const router = useRouter();
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
+  const [joinCode, setJoinCode] = useState("");
+  const [roomBusy, setRoomBusy] = useState(false);
   const [latest, setLatest] = useState([]);
   const [latestError, setLatestError] = useState("");
 
@@ -38,6 +40,26 @@ export default function SearchPage() {
     }
   };
 
+  const join = () => {
+    const code = joinCode.trim().toLowerCase();
+    if (code.length !== 6) return toast.error("Enter a 6-character room code");
+    router.push(`/room/${code}`);
+  };
+
+  const createRoom = async () => {
+    if (roomBusy) return;
+    setRoomBusy(true);
+    try {
+      const res = await api.createRoom({ name: "New Room", ttlHours: 24 });
+      router.push(`/room/${res.data.code}`);
+    } catch (e) {
+      console.error("Create room failed:", e);
+      toast.error(e?.message || "Could not create room");
+    } finally {
+      setRoomBusy(false);
+    }
+  };
+
   return (
     <div className="rise mx-auto w-full max-w-2xl space-y-5">
       <div className="text-center">
@@ -61,6 +83,29 @@ export default function SearchPage() {
           </button>
         </div>
         <p className="mt-2 text-xs muted">Links look like <span className="mono">/code/a3f9</span> — the last 4 characters are the ID.</p>
+      </section>
+
+      <section className="card p-4 sm:p-5">
+        <h2 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wider muted">
+          <Users className="h-4 w-4" /> Rooms
+        </h2>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <input
+            value={joinCode}
+            onChange={(e) => setJoinCode(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 6))}
+            onKeyDown={(e) => e.key === "Enter" && join()}
+            placeholder="6-character room code"
+            maxLength={6}
+            className="field mono"
+            aria-label="Room code"
+          />
+          <div className="flex gap-2">
+            <button type="button" onClick={join} className="btn btn-ghost flex-1 sm:flex-none">Join</button>
+            <button type="button" onClick={createRoom} disabled={roomBusy} className="btn btn-primary flex-1 sm:flex-none">
+              {roomBusy ? "…" : "+ Room"}
+            </button>
+          </div>
+        </div>
       </section>
 
       <section className="card p-4 sm:p-5">

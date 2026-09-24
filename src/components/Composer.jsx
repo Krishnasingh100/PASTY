@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { FileUp, ImagePlus, Plus, SendHorizontal, X } from "lucide-react";
+import { FileUp, ImagePlus, Plus, X } from "lucide-react";
 import UploadZone from "@/components/UploadZone.jsx";
 
 // WhatsApp-style composer: + attach menu, growing box, send button.
@@ -15,8 +15,8 @@ export default function Composer({
   screenshots,
   files,
   onFiles,
-  maxTotal,
   attachIdPrefix = "att",
+  formatOnPaste = true,
 }) {
   const [attachOpen, setAttachOpen] = useState(false);
   const [mode, setMode] = useState(null);
@@ -62,7 +62,6 @@ export default function Composer({
             screenshots={screenshots}
             files={files}
             onFiles={onFiles}
-            maxTotal={maxTotal}
             idPrefix={attachIdPrefix}
           />
         </div>
@@ -95,19 +94,33 @@ export default function Composer({
               requestAnimationFrame(() => { t.selectionStart = t.selectionEnd = start + 4; });
             }
           }}
+          onPaste={async (e) => {
+            if (!formatOnPaste) return;
+            const pasted = e.clipboardData?.getData("text") || "";
+            if (!pasted) return;
+            e.preventDefault();
+            const t = e.target;
+            const next = t.value.slice(0, t.selectionStart) + pasted + t.value.slice(t.selectionEnd);
+            try {
+              const { tryFormat } = await import("@/lib/formatCode.js");
+              onChange(await tryFormat(next));
+            } catch {
+              onChange(next);
+            }
+          }}
           placeholder={placeholder}
           className="composer-box"
           aria-label={sendLabel}
         />
         <button type="button" onClick={onSend} disabled={!canSend || sending} className="send-btn" aria-label={sendLabel} title={sendLabel}>
-          <SendHorizontal className="h-5 w-5" />
+          Send
         </button>
       </div>
     </div>
   );
 }
 
-function AttachPicker({ mode, screenshots, files, onFiles, maxTotal, idPrefix }) {
+function AttachPicker({ mode, screenshots, files, onFiles, idPrefix }) {
   const inputRef = useRef(null);
   if (mode === "photos") {
     return (

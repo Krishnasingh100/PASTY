@@ -4,9 +4,7 @@ import { useRef, useState } from "react";
 import { ImagePlus, Paperclip, X } from "lucide-react";
 import { toast } from "react-toastify";
 import { formatSize } from "@/lib/format.js";
-
-const IMAGE_TYPES = ["image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp"];
-const BLOCKED = [".exe", ".msi", ".bat", ".cmd", ".com", ".scr", ".pif"];
+import { BLOCKED, IMAGE_TYPES } from "@/lib/attach.js";
 
 export default function UploadZone({ screenshots, files, onChange, maxTotal = 10 * 1024 * 1024, maxShots = 5, maxFiles = 5, compact = false, hideDrop = false }) {
   const [drag, setDrag] = useState(false);
@@ -39,7 +37,6 @@ export default function UploadZone({ screenshots, files, onChange, maxTotal = 10
     }
     if (ss.length || ff.length) {
       onChange({ screenshots: [...screenshots, ...ss], files: [...files, ...ff] });
-      toast.success(`${ss.length + ff.length} file(s) added`);
     }
   };
 

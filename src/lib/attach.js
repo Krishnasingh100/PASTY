@@ -28,6 +28,4 @@ export function addIncoming(screenshots, files, incoming, opts = {}) {
     }
     running += file.size;
   }
-  if (ss.length || ff.length) toast.success(`${ss.length + ff.length} file(s) added`);
-  return { screenshots: [...screenshots, ...ss], files: [...files, ...ff] };
-}
+  return { screenshots: [...screenshots, ...ss], files: [...files, ...ff] };}

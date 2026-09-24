@@ -30,11 +30,19 @@ export function extractId(value) {
   return trimmed.replace(/[^a-zA-Z0-9]/g, "").slice(0, 4).toLowerCase();
 }
 
-export async function copyText(text, okMsg = "Copied!") {
+export function deriveTitle(code = "", screenshots = [], files = []) {
+  const line = (code || "").split("\n").map((s) => s.trim()).find(Boolean);
+  if (line) return line.slice(0, 60);
+  const all = [...screenshots, ...files];
+  if (all.length === 1) return (all[0].name || "File").slice(0, 60);
+  if (all.length > 1) return `${(all[0].name || "File").slice(0, 40)} +${all.length - 1} more`;
+  return "Untitled";
+}
+
+export async function copyText(text) {
   const { toast } = await import("react-toastify");
   try {
     await navigator.clipboard.writeText(text);
-    toast.success(okMsg);
   } catch {
     toast.error("Copy failed");
   }

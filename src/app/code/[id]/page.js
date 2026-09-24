@@ -3,11 +3,12 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { AlertTriangle, Download, FileText, Plus } from "lucide-react";
+import { AlertTriangle, Plus } from "lucide-react";
 import { toast } from "react-toastify";
 import api, { downloadUrl } from "@/lib/api.js";
 import { copyText, formatSize, formatTTL, timeRemaining } from "@/lib/format.js";
 import CodeBlock from "@/components/CodeBlock.jsx";
+import FileBubble from "@/components/FileBubble.jsx";
 import Lightbox from "@/components/Lightbox.jsx";
 
 const time = (d) => new Date(d).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -89,21 +90,7 @@ export default function ViewPage() {
 
         {gist.files?.map((f, i) => (
           <div key={`f-${i}`} className="bubble bubble-in">
-            <button
-              type="button"
-              onClick={() => downloadUrl(api.gistFileUrl(gist.id, i), f.name).catch(() => toast.error("Download failed"))}
-              className="flex w-full items-center gap-2.5 text-left"
-              style={{ cursor: "pointer" }}
-            >
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full" style={{ backgroundColor: "var(--secondary-hover)" }}>
-                <FileText className="h-5 w-5" style={{ color: "var(--accent-color)" }} />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium">{f.name}</span>
-                <span className="block text-xs muted">{formatSize(f.size)} · tap to download</span>
-              </span>
-              <Download className="h-4 w-4 shrink-0 muted" />
-            </button>
+            <FileBubble url={api.gistFileUrl(gist.id, i)} name={f.name} size={f.size} mime={f.contentType} />
             <div className="bubble-meta"><span>{time(gist.createdAt)}</span></div>
           </div>
         ))}

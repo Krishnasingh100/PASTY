@@ -3,14 +3,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { AlertTriangle, ArrowLeft, CheckCheck, Download, FileText, Plus } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, Plus } from "lucide-react";
 import { toast } from "react-toastify";
 import api, { downloadUrl } from "@/lib/api.js";
 import { addIncoming } from "@/lib/attach.js";
 import { isOwn, markOwn } from "@/lib/device.js";
-import { copyText, formatSize, formatTTL, timeRemaining } from "@/lib/format.js";
+import { copyText, deriveTitle, formatSize, formatTTL, timeRemaining } from "@/lib/format.js";
+import { tryFormat } from "@/lib/formatCode.js";
+import { addVisited } from "@/lib/visited.js";
 import CodeBlock from "@/components/CodeBlock.jsx";
 import Composer from "@/components/Composer.jsx";
+import PendingPreview from "@/components/PendingPreview.jsx";
 import Lightbox from "@/components/Lightbox.jsx";
 
 const POLL_MS = 10000;
@@ -21,12 +24,13 @@ export default function RoomPage() {
   const { code } = useParams();
   const [room, setRoom] = useState(null);
   const [error, setError] = useState("");
-  const [title, setTitle] = useState("");
   const [entryCode, setEntryCode] = useState("");
   const [screenshots, setScreenshots] = useState([]);
   const [files, setFiles] = useState([]);
   const [adding, setAdding] = useState(false);
   const [lightbox, setLightbox] = useState(null);
+  const [dragging, setDragging] = useState(false);
+  const dragCount = useRef(0);
   const timer = useRef(null);
   const bottomRef = useRef(null);
 
@@ -37,6 +41,7 @@ export default function RoomPage() {
       if (!res?.data?.code) throw new Error("Bad room response");
       setRoom(res.data);
       setError("");
+      addVisited(res.data.code, res.data.name);
     } catch (e) {
       console.error("Load room failed:", e);
       if (!silent) setError(e?.message || "Failed to load room");
@@ -65,11 +70,14 @@ export default function RoomPage() {
       toast.error("Type something or attach a file first");
       return;
     }
+    const formatted = await tryFormat(entryCode);
+    if (formatted !== entryCode) setEntryCode(formatted);
+    const autoTitle = deriveTitle(formatted, screenshots, files);
     const tempId = `temp-${Date.now()}`;
     const temp = {
       id: tempId,
-      title: title || "Untitled",
-      code: entryCode.trim(),
+      title: autoTitle,
+      code: formatted.trim(),
       entrySize: [...screenshots, ...files].reduce((s, f) => s + f.size, 0),
       screenshots: screenshots.map((f) => ({ name: f.name, size: f.size })),
       files: files.map((f) => ({ name: f.name, size: f.size })),
@@ -79,10 +87,9 @@ export default function RoomPage() {
     setRoom((prev) => (prev ? { ...prev, entries: [temp, ...prev.entries] } : prev));
     setAdding(true);
     try {
-      const res = await api.addRoomEntry(code, { code: entryCode.trim(), title: title || "Untitled" }, screenshots, files);
+      const res = await api.addRoomEntry(code, { code: formatted.trim(), title: autoTitle }, screenshots, files);
       if (!res?.success) throw new Error("Server rejected entry");
       if (res?.data?.id) markOwn(res.data.id);
-      setTitle("");
       setEntryCode("");
       setScreenshots([]);
       setFiles([]);
@@ -125,9 +132,22 @@ export default function RoomPage() {
   const totalSel = [...screenshots, ...files].reduce((s, f) => s + f.size, 0);
 
   return (
-    <div className="rise space-y-3">
+    <div
+      className="rise space-y-3"
+      onDragEnter={(e) => { e.preventDefault(); dragCount.current++; setDragging(true); }}
+      onDragOver={(e) => e.preventDefault()}
+      onDragLeave={(e) => { e.preventDefault(); dragCount.current--; if (dragCount.current <= 0) { dragCount.current = 0; setDragging(false); } }}
+      onDrop={(e) => { e.preventDefault(); dragCount.current = 0; setDragging(false); onFiles(e.dataTransfer.files); }}
+    >
+      {dragging && (
+        <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: "rgba(0,0,0,0.55)" }}>
+          <div className="rounded-2xl px-8 py-6 text-lg font-bold" style={{ border: "3px dashed var(--primary-color)", color: "var(--foreground)", backgroundColor: "var(--card-bg)" }}>
+            Drop to attach
+          </div>
+        </div>
+      )}
       <section className="card flex flex-wrap items-center gap-2 p-3 sm:p-4">
-        <Link href="/" className="icon-btn shrink-0" aria-label="Back home" title="Back">
+        <Link href="/" className="icon-btn shrink-0" aria-label="Back to new paste" title="Back">
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg font-bold" style={{ backgroundColor: "var(--secondary-hover)", color: "var(--accent-color)" }}>
@@ -152,12 +172,13 @@ export default function RoomPage() {
 
       <div className="chat">
         <div className="date-chip">{day(room.createdAt)}</div>
-        <div className="notice">
-          Room <span className="mono font-bold">{room.code}</span> · {room.entries.length} messages · {formatTTL(room.ttlHours)} life · yours appear on the right
-        </div>
 
         {room.entries.length === 0 && (
-          <div className="notice">No messages yet — say hello below.</div>
+          <div className="bubble bubble-in">
+            <div className="bubble-name">Pasty</div>
+            <div className="text-sm">Room <span className="mono font-bold">{room.code}</span> is live — say hello below. Your messages appear on the right.</div>
+            <div className="bubble-meta"><span>{time(room.createdAt)}</span></div>
+          </div>
         )}
 
         {room.entries.map((entry) => {
@@ -185,22 +206,9 @@ export default function RoomPage() {
                 </div>
               ))}
               {!entry._sending && entry.files?.map((f, i) => (
-                <button
-                  key={`f-${i}`}
-                  type="button"
-                  onClick={() => downloadUrl(api.roomFileUrl(room.code, entry.id, i), f.name).catch(() => toast.error("Download failed"))}
-                  className="mt-1.5 flex w-full items-center gap-2.5 rounded-lg p-2 text-left"
-                  style={{ backgroundColor: "rgba(0,0,0,0.22)", cursor: "pointer" }}
-                >
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full" style={{ backgroundColor: "rgba(0,0,0,0.3)" }}>
-                    <FileText className="h-4 w-4" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium">{f.name}</span>
-                    <span className="block text-xs" style={{ opacity: 0.75 }}>{formatSize(f.size)} · tap to save</span>
-                  </span>
-                  <Download className="h-4 w-4 shrink-0" style={{ opacity: 0.75 }} />
-                </button>
+                <div key={`f-${i}`} className="mt-1.5">
+                  <FileBubble url={api.roomFileUrl(room.code, entry.id, i)} name={f.name} size={f.size} mime={f.contentType} variant="soft" />
+                </div>
               ))}
               {entry._sending && (entry.screenshots.length > 0 || entry.files.length > 0) && (
                 <div className="mt-1.5 text-xs" style={{ opacity: 0.8 }}>
@@ -214,7 +222,7 @@ export default function RoomPage() {
                   <>
                     {entry.entrySize > 0 && <span>{formatSize(entry.entrySize)}</span>}
                     <span>{time(entry.createdAt)}</span>
-                    {own && <CheckCheck className="h-3.5 w-3.5" />}
+                    {own && <Check className="h-3.5 w-3.5" />}
                   </>
                 )}
               </div>
@@ -224,17 +232,13 @@ export default function RoomPage() {
         <div ref={bottomRef} />
       </div>
 
-      <div className="flex items-center gap-2">
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Name this message (optional)"
-          maxLength={100}
-          className="field"
-          aria-label="Message title"
-        />
-        {totalSel > 0 && <span className="chip shrink-0">{formatSize(totalSel)}</span>}
-      </div>
+      {totalSel > 0 && (
+        <div className="flex items-center gap-2">
+          <span className="chip shrink-0">{formatSize(totalSel)} attached</span>
+        </div>
+      )}
+
+      <PendingPreview code={entryCode} screenshots={screenshots} files={files} />
 
       <Composer
         value={entryCode}
@@ -246,7 +250,6 @@ export default function RoomPage() {
         screenshots={screenshots}
         files={files}
         onFiles={onFiles}
-        maxTotal={Math.min(10 * 1024 * 1024, Math.max(0, room.maxSize - room.totalSize))}
         attachIdPrefix="room"
       />
 

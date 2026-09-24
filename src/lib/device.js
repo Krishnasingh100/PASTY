@@ -1,18 +1,3 @@
-export function getDeviceId() {
-  if (typeof window === "undefined") return "server";
-  let id = null;
-  try {
-    id = window.localStorage.getItem("pasty-device");
-    if (!id) {
-      id = Math.random().toString(36).slice(2) + Date.now().toString(36);
-      window.localStorage.setItem("pasty-device", id);
-    }
-  } catch {
-    id = "anon";
-  }
-  return id;
-}
-
 export function markOwn(entryId) {
   try {
     const raw = window.localStorage.getItem("pasty-own") || "[]";

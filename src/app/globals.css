@@ -3,68 +3,67 @@
 @tailwind utilities;
 
 :root,
-[data-theme="dark"] {
-  --background: #0b141a;
-  --background-soft: #0d181f;
-  --foreground: #e9edef;
-  --card-bg: #111b21;
-  --input-bg: #1f2c34;
-  --border-color: #222d34;
-  --muted-foreground: #8696a0;
-  --primary-color: #00a884;
-  --primary-hover: #06cf9c;
-  --primary-ink: #06281f;
-  --secondary-color: #1f2c34;
-  --secondary-hover: #2a3942;
-  --accent-color: #53bdeb;
-  --danger-color: #f15c6d;
-  --bubble-in: #1f2c34;
-  --bubble-out: #005c4b;
-  --bubble-ink: #e9edef;
+[data-theme="grape"] {
+  --background: #121016;
+  --background-soft: #16131c;
+  --foreground: #f1ecf9;
+  --card-bg: #1a1622;
+  --input-bg: #241f2e;
+  --border-color: #322a42;
+  --muted-foreground: #a79fb8;
+  --primary-color: #a78bfa;
+  --primary-hover: #c4b5fd;
+  --primary-ink: #1e1033;
+  --secondary-color: #241f2e;
+  --secondary-hover: #2f2740;
+  --accent-color: #f0abfc;
+  --danger-color: #fb7185;
+  --bubble-in: #221c30;
+  --bubble-out: #3b2a5e;
+  --bubble-ink: #f1ecf9;
   --shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
   --radius: 14px;
 }
 
-[data-theme="light"] {
-  --background: #efeae2;
-  --background-soft: #e5ddd2;
-  --foreground: #111b21;
-  --card-bg: #ffffff;
-  --input-bg: #f0f2f5;
-  --border-color: #d1d7db;
-  --muted-foreground: #667781;
-  --primary-color: #008069;
-  --primary-hover: #06a17f;
+[data-theme="light"] {  --background: #f6f4ef;
+  --background-soft: #ede9df;
+  --foreground: #1f1b24;
+  --card-bg: #fffdf8;
+  --input-bg: #f1ece1;
+  --border-color: #ddd3c2;
+  --muted-foreground: #7c7264;
+  --primary-color: #7c3aed;
+  --primary-hover: #6d28d9;
   --primary-ink: #ffffff;
-  --secondary-color: #f0f2f5;
-  --secondary-hover: #e2e6ea;
-  --accent-color: #007bfc;
-  --danger-color: #ea0038;
-  --bubble-in: #ffffff;
-  --bubble-out: #d9fdd3;
-  --bubble-ink: #111b21;
-  --shadow: 0 4px 14px rgba(11, 20, 26, 0.12);
+  --secondary-color: #f1ece1;
+  --secondary-hover: #e3dac7;
+  --accent-color: #a21caf;
+  --danger-color: #e11d48;
+  --bubble-in: #fffdf8;
+  --bubble-out: #e9e0fb;
+  --bubble-ink: #1f1b24;
+  --shadow: 0 4px 14px rgba(31, 27, 36, 0.12);
 }
 
-[data-theme="ocean"] {
-  --background: #06121f;
-  --background-soft: #081728;
-  --foreground: #e8f1ff;
-  --card-bg: #0b1e33;
-  --input-bg: #0e2742;
-  --border-color: #1b3a5c;
-  --muted-foreground: #8ba3c7;
-  --primary-color: #38bdf8;
-  --primary-hover: #7dd3fc;
-  --primary-ink: #04121f;
-  --secondary-color: #10294a;
-  --secondary-hover: #16345c;
-  --accent-color: #fbbf24;
+[data-theme="sunset"] {
+  --background: #160f0d;
+  --background-soft: #1c1410;
+  --foreground: #fbeedd;
+  --card-bg: #211511;
+  --input-bg: #2c1d16;
+  --border-color: #453022;
+  --muted-foreground: #bfa48e;
+  --primary-color: #fb923c;
+  --primary-hover: #fdba74;
+  --primary-ink: #2a1503;
+  --secondary-color: #2c1d16;
+  --secondary-hover: #3c2719;
+  --accent-color: #fde68a;
   --danger-color: #fb7185;
-  --bubble-in: #0f2a4a;
-  --bubble-out: #075985;
-  --bubble-ink: #e8f1ff;
-  --shadow: 0 8px 26px rgba(0, 0, 0, 0.5);
+  --bubble-in: #2a1c14;
+  --bubble-out: #57300f;
+  --bubble-ink: #fbeedd;
+  --shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
   --radius: 14px;
 }
 
@@ -104,9 +103,7 @@ button:focus-visible {
 }
 
 .wrap {
-  margin: 0 auto;
   width: 100%;
-  max-width: 72rem;
   padding: 1rem;
 }
 
@@ -203,6 +200,158 @@ button:focus-visible {
   color: var(--muted-foreground);
 }
 
+/* WhatsApp-style shell: sidebar + thread pane */
+.shell {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  min-height: calc(100dvh - 53px);
+}
+
+.thread-pane {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  padding: 1rem;
+}
+
+@media (min-width: 640px) {
+  .thread-pane {
+    padding: 1.5rem;
+  }
+}
+
+.mobilebar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.75rem;
+  background-color: var(--card-bg);
+  border-bottom: 1px solid var(--border-color);
+}
+
+@media (min-width: 900px) {
+  .mobilebar {
+    display: none;
+  }
+}
+
+.sidebar {
+  display: none;
+  width: 300px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border-color);
+  background-color: var(--card-bg);
+  height: calc(100dvh - 53px);
+  position: sticky;
+  top: 53px;
+  flex-direction: column;
+  min-height: 0;
+}
+
+@media (min-width: 900px) {
+  .sidebar {
+    display: flex;
+    top: 0;
+    height: 100dvh;
+  }
+  .mobilebar {
+    display: none;
+  }
+  .shell {
+    min-height: 100dvh;
+  }
+}
+
+@media (max-width: 899px) {
+  .shell {
+    min-height: calc(100dvh - 49px);
+  }
+}
+
+.sidebar-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 0.8rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.sidebar-search {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.6rem 0.8rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.sidebar-search-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 10px;
+  padding: 0.35rem 0.6rem;
+  background-color: var(--input-bg);
+  border: 1px solid var(--border-color);
+}
+
+.sidebar-search-row input {
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 0.8rem;
+  color: var(--foreground);
+  padding: 0.15rem 0;
+}
+
+.sidebar-search-row input::placeholder {
+  color: var(--muted-foreground);
+}
+
+.sidebar-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.4rem 0.5rem 1rem;
+  min-height: 0;
+}
+
+.sidebar-title {
+  padding: 0.7rem 0.5rem 0.3rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted-foreground);
+}
+
+.sidebar-empty {
+  padding: 0.2rem 0.5rem 0.6rem;
+  font-size: 0.8rem;
+  color: var(--muted-foreground);
+}
+
+.side-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  border-radius: 10px;
+  padding: 0.5rem;
+  text-decoration: none;
+}
+
+.side-item:hover {
+  background-color: var(--secondary-hover);
+}
+
+/* Doodle texture on the scroll thread */
+.chat-scroll {
+  background-image: radial-gradient(rgba(134, 150, 160, 0.13) 1px, transparent 1.4px);
+  background-size: 20px 20px;
+}
+
 /* Chat thread */
 .chat {
   display: flex;
@@ -210,23 +359,41 @@ button:focus-visible {
   gap: 0.5rem;
 }
 
-.date-chip {
-  align-self: center;
-  border-radius: 8px;
-  padding: 0.25rem 0.75rem;
-  font-size: 0.72rem;
-  background-color: var(--input-bg);
+/* Scrollable thread window on the New paste screen */
+.chat-scroll {
+  overflow-y: auto;
+  min-height: 280px;
+  max-height: calc(100dvh - 330px);
+  border-radius: var(--radius);
+  padding: 0.75rem;
+  background-color: var(--background-soft);
   border: 1px solid var(--border-color);
+  scrollbar-width: thin;
+}
+
+@media (max-width: 640px) {
+  .chat-scroll {
+    max-height: calc(100dvh - 300px);
+    padding: 0.5rem;
+  }
+}
+
+.date-chip {
+  align-self: flex-start;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
   color: var(--muted-foreground);
+  padding: 0.1rem 0;
 }
 
 .notice {
-  align-self: center;
-  max-width: 90%;
+  align-self: stretch;
   border-radius: 10px;
-  padding: 0.4rem 0.8rem;
-  font-size: 0.75rem;
-  text-align: center;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.78rem;
+  text-align: left;
   background-color: var(--input-bg);
   border: 1px solid var(--border-color);
   color: var(--muted-foreground);
@@ -234,7 +401,7 @@ button:focus-visible {
 
 .bubble {
   position: relative;
-  max-width: 88%;
+  max-width: 94%;
   min-width: 0;
   border-radius: 12px;
   padding: 0.5rem 0.6rem 0.35rem;
@@ -245,7 +412,7 @@ button:focus-visible {
 
 @media (min-width: 640px) {
   .bubble {
-    max-width: 72%;
+    max-width: 82%;
   }
 }
 
@@ -253,13 +420,11 @@ button:focus-visible {
   align-self: flex-start;
   background-color: var(--bubble-in);
   border: 1px solid var(--border-color);
-  border-top-left-radius: 2px;
 }
 
 .bubble-out {
   align-self: flex-end;
   background-color: var(--bubble-out);
-  border-top-right-radius: 2px;
 }
 
 .bubble-name {
@@ -340,9 +505,11 @@ button:focus-visible {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
   height: 44px;
+  padding: 0 1.15rem;
   border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 700;
   background-color: var(--primary-color);
   color: var(--primary-ink);
   border: none;
@@ -439,7 +606,7 @@ button:focus-visible {
 }
 
 [data-theme="light"] .code-shell {
-  background-color: #0d1b2a;
+  background-color: #101418;
 }
 
 [data-theme="light"] .code-shell .hljs {
@@ -454,7 +621,7 @@ button:focus-visible {
   padding: 0.3rem 0.3rem 0.3rem 0.7rem;
   font-size: 0.7rem;
   background-color: rgba(0, 0, 0, 0.3);
-  color: #9fb3c8;
+  color: #9aa7b4;
 }
 
 @keyframes rise {
@@ -476,10 +643,6 @@ button:focus-visible {
   .rise {
     animation: none;
   }
-}
-
-.timeline {
-  position: relative;
 }
 
 @media (max-width: 480px) {

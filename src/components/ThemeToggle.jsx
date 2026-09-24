@@ -1,24 +1,21 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Moon, Sun, Waves } from "lucide-react";
+import { Moon, Sun, Sunset } from "lucide-react";
 
-const ORDER = ["dark", "light", "ocean"];
-const ICONS = { dark: Moon, light: Sun, ocean: Waves };
-const LABELS = { dark: "Dark", light: "Light", ocean: "Ocean" };
+const ORDER = ["grape", "light", "sunset"];
+const ICONS = { grape: Moon, light: Sun, sunset: Sunset };
+const LABELS = { grape: "Grape dark", light: "Light", sunset: "Sunset dark" };
 
 export default function ThemeToggle() {
-  const [theme, setTheme] = useState("dark");
+  const [theme, setTheme] = useState("grape");
 
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem("pasty-theme");
-      if (saved && ORDER.includes(saved)) {
-        setTheme(saved);
-        document.documentElement.dataset.theme = saved;
-      } else {
-        document.documentElement.dataset.theme = "dark";
-      }
+      const next = ORDER.includes(saved) ? saved : "grape";
+      setTheme(next);
+      document.documentElement.dataset.theme = next;
     } catch {}
   }, []);
 
@@ -31,14 +28,14 @@ export default function ThemeToggle() {
     } catch {}
   };
 
-  const Icon = ICONS[theme];
+  const Icon = ICONS[theme] || Moon;
   return (
     <button
       type="button"
       onClick={cycle}
       className="icon-btn"
-      title={`Theme: ${LABELS[theme]} — tap to change`}
-      aria-label={`Theme: ${LABELS[theme]}`}
+      title={`${LABELS[theme] || "Grape dark"} — tap for next theme`}
+      aria-label="Change theme"
       style={{ border: "1px solid var(--border-color)", backgroundColor: "var(--secondary-color)", color: "var(--foreground)" }}
     >
       <Icon className="h-4 w-4" />
