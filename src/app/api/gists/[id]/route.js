@@ -1,34 +1,31 @@
-import dbConnect from "@/lib/db.js";
-import Gist from "@/models/Gist.js";
+import { and, asc, eq, gt } from "drizzle-orm";
+import { getDb } from "@/lib/db.js";
+import { gistAttachments, gists } from "@/db/schema.js";
 
 export async function GET(req, { params }) {
   try {
-    await dbConnect();
     const { id } = await params;
     if (!id || id.length !== 4) {
       return Response.json({ success: false, message: "Invalid gist ID format" }, { status: 400 });
     }
-    const gist = await Gist.findOne({ id: id.toLowerCase(), expiresAt: { $gt: new Date() } })
-      .select("-screenshots.data -files.data")
-      .lean();
-    if (!gist) {
+    const db = getDb();
+    const now = new Date();
+    const rows = await db
+      .select()
+      .from(gists)
+      .where(and(eq(gists.id, id.toLowerCase()), gt(gists.expiresAt, now)));
+    if (rows.length === 0) {
       return Response.json({ success: false, message: "Code snippet not found or expired" }, { status: 404 });
     }
+    const gist = rows[0];
+    const atts = await db
+      .select({ id: gistAttachments.id, kind: gistAttachments.kind, mime: gistAttachments.mime, name: gistAttachments.name, size: gistAttachments.size })
+      .from(gistAttachments)
+      .where(eq(gistAttachments.gistId, gist.id))
+      .orderBy(asc(gistAttachments.id));
 
-    const screenshots = (gist.screenshots || []).map((s, index) => ({
-      index,
-      name: s.name,
-      size: s.size,
-      contentType: s.contentType,
-      url: `/api/gists/${gist.id}/screenshots/${index}`,
-    }));
-    const files = (gist.files || []).map((f, index) => ({
-      index,
-      name: f.name,
-      size: f.size,
-      contentType: f.contentType,
-      url: `/api/gists/${gist.id}/files/${index}`,
-    }));
+    const shots = atts.filter((a) => a.kind === "screenshot");
+    const files = atts.filter((a) => a.kind === "file");
 
     return Response.json({
       success: true,
@@ -38,8 +35,8 @@ export async function GET(req, { params }) {
         fileName: gist.fileName,
         title: gist.title,
         ttlHours: gist.ttlHours,
-        screenshots,
-        files,
+        screenshots: shots.map((s, index) => ({ index, name: s.name, size: s.size, contentType: s.mime, url: `/api/gists/${gist.id}/screenshots/${index}` })),
+        files: files.map((f, index) => ({ index, name: f.name, size: f.size, contentType: f.mime, url: `/api/gists/${gist.id}/files/${index}` })),
         createdAt: gist.createdAt,
         expiresAt: gist.expiresAt,
       },

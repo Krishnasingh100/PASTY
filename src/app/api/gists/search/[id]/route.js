@@ -1,19 +1,29 @@
-import dbConnect from "@/lib/db.js";
-import Gist from "@/models/Gist.js";
+import { and, eq, gt } from "drizzle-orm";
+import { getDb } from "@/lib/db.js";
+import { gistAttachments, gists } from "@/db/schema.js";
 
 export async function GET(req, { params }) {
   try {
-    await dbConnect();
     const { id } = await params;
     if (!id || id.length !== 4) {
-      return Response.json({ success: false, message: "Invalid gist ID format. ID must be exactly 4 characters long." }, { status: 400 });
+      return Response.json(
+        { success: false, message: "Invalid gist ID format. ID must be exactly 4 characters long." },
+        { status: 400 }
+      );
     }
-    const gist = await Gist.findOne({ id: id.toLowerCase(), expiresAt: { $gt: new Date() } })
-      .select("-screenshots.data -files.data")
-      .lean();
-    if (!gist) {
+    const db = getDb();
+    const rows = await db
+      .select()
+      .from(gists)
+      .where(and(eq(gists.id, id.toLowerCase()), gt(gists.expiresAt, new Date())));
+    if (rows.length === 0) {
       return Response.json({ success: false, message: "Code snippet not found or expired" }, { status: 404 });
     }
+    const gist = rows[0];
+    const atts = await db
+      .select({ kind: gistAttachments.kind })
+      .from(gistAttachments)
+      .where(eq(gistAttachments.gistId, gist.id));
     return Response.json({
       success: true,
       data: {
@@ -21,8 +31,8 @@ export async function GET(req, { params }) {
         title: gist.title,
         fileName: gist.fileName,
         ttlHours: gist.ttlHours,
-        screenshotCount: (gist.screenshots || []).length,
-        fileCount: (gist.files || []).length,
+        screenshotCount: atts.filter((a) => a.kind === "screenshot").length,
+        fileCount: atts.filter((a) => a.kind === "file").length,
         createdAt: gist.createdAt,
         expiresAt: gist.expiresAt,
       },

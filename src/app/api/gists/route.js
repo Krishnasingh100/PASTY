@@ -1,11 +1,11 @@
-import dbConnect from "@/lib/db.js";
-import Gist, { MAX_TTL_HOURS } from "@/models/Gist.js";
+import { and, desc, eq, gt, sql } from "drizzle-orm";
+import { getDb } from "@/lib/db.js";
+import { gistAttachments, gists } from "@/db/schema.js";
 import { generateUniqueGistId } from "@/lib/ids.js";
 import { parseUploadForm } from "@/lib/upload.js";
 
 export async function POST(req) {
   try {
-    await dbConnect();
     const formData = await req.formData();
     const { code, title, ttlHours, screenshots, files } = await parseUploadForm(formData);
 
@@ -17,34 +17,55 @@ export async function POST(req) {
       return Response.json({ success: false, message: "Code content too large (max 100KB)" }, { status: 400 });
     }
 
+    const db = getDb();
     const id = await generateUniqueGistId();
-    const expiresAt = new Date(Date.now() + ttlHours * 60 * 60 * 1000);
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + ttlHours * 60 * 60 * 1000);
     const fileName = (formData.get("fileName") || "untitled.txt").toString().slice(0, 50);
 
-    const gist = new Gist({
+    await db.insert(gists).values({
       id,
       code: codeContent,
       title: title.trim().slice(0, 100) || "Untitled",
       fileName,
-      screenshots,
-      files,
       ttlHours,
       expiresAt,
     });
-    await gist.save();
+
+    const rows = [
+      ...screenshots.map((f) => ({
+        gistId: id,
+        kind: "screenshot",
+        dataBase64: f.data.toString("base64"),
+        mime: f.contentType,
+        name: f.name.slice(0, 255),
+        size: f.size,
+      })),
+      ...files.map((f) => ({
+        gistId: id,
+        kind: "file",
+        dataBase64: f.data.toString("base64"),
+        mime: f.contentType,
+        name: f.name.slice(0, 255),
+        size: f.size,
+      })),
+    ];
+    if (rows.length > 0) await db.insert(gistAttachments).values(rows);
+
+    const saved = await db.select().from(gists).where(eq(gists.id, id));
 
     return Response.json(
       {
         success: true,
         data: {
-          id: gist.id,
-          title: gist.title,
-          fileName: gist.fileName,
-          ttlHours: gist.ttlHours,
-          screenshotCount: gist.screenshots.length,
-          fileCount: gist.files.length,
-          createdAt: gist.createdAt,
-          expiresAt: gist.expiresAt,
+          id,
+          title: saved[0]?.title,
+          fileName: saved[0]?.fileName,
+          ttlHours,
+          screenshotCount: screenshots.length,
+          fileCount: files.length,
+          createdAt: saved[0]?.createdAt,
+          expiresAt: saved[0]?.expiresAt,
         },
         message: "Code snippet created successfully",
       },
@@ -52,30 +73,45 @@ export async function POST(req) {
     );
   } catch (e) {
     const msg = e.message || "Internal server error";
-    const status = msg.startsWith("Max") || msg.startsWith("Blocked") || msg.startsWith("Invalid") || msg.startsWith("Total") ? 400 : 500;
+    const status =
+      msg.startsWith("Max") || msg.startsWith("Blocked") || msg.startsWith("Invalid") || msg.startsWith("Total") || msg.startsWith("Missing")
+        ? 400
+        : 500;
     return Response.json({ success: false, message: msg }, { status });
   }
 }
 
 export async function GET(req) {
   try {
-    await dbConnect();
+    const db = getDb();
     const { searchParams } = new URL(req.url);
     const page = parseInt(searchParams.get("page") || "1", 10) || 1;
     const limit = Math.min(parseInt(searchParams.get("limit") || "20", 10) || 20, 50);
-    const skip = (page - 1) * limit;
+    const offset = (page - 1) * limit;
     const now = new Date();
 
-    const gists = await Gist.find({ expiresAt: { $gt: now } })
-      .sort({ createdAt: -1 })
-      .skip(skip)
+    const rows = await db
+      .select({
+        id: gists.id,
+        title: gists.title,
+        fileName: gists.fileName,
+        ttlHours: gists.ttlHours,
+        createdAt: gists.createdAt,
+        expiresAt: gists.expiresAt,
+      })
+      .from(gists)
+      .where(gt(gists.expiresAt, now))
+      .orderBy(desc(gists.createdAt))
       .limit(limit)
-      .select("id title fileName ttlHours createdAt expiresAt")
-      .lean();
-    const total = await Gist.countDocuments({ expiresAt: { $gt: now } });
+      .offset(offset);
+    const totalRows = await db
+      .select({ n: sql`count(*)` })
+      .from(gists)
+      .where(gt(gists.expiresAt, now));
 
-    return Response.json({ success: true, data: gists, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
+    const total = Number(totalRows[0]?.n || 0);
+    return Response.json({ success: true, data: rows, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
   } catch (e) {
-    return Response.json({ success: false, message: "Internal server error" }, { status: 500 });
+    return Response.json({ success: false, message: e.message || "Internal server error" }, { status: 500 });
   }
 }

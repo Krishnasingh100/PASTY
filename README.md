@@ -1,12 +1,14 @@
 # Pasty Next
 
-Simple code share. Full Next.js monolith. No Express. No blob. Same idea as old MERN zip.
+Share code with a short link. Friends open link, see code, download files. Links expire automatic.
 
-- Single paste: 4-letter ID, code + screenshots + files, TTL 1h-7d, 10MB cap
-- Room: 6-char code, multi entries, 50MB total cap, 5s poll refresh
-- MongoDB Atlas inline binary, TTL auto delete
+Pasty lets you share text, pictures, files fast. Create paste, get 4-letter ID. Create room, invite with 6-letter code. Everyone adds entries together.
 
-GitHub About suggestion: `Minimal code sharing app built with Next.js and MongoDB — share code with a 4-letter ID or collaborate in rooms.`
+Simple sharing for classmates. No login. Paste code, attach screenshots, set expiry 1 hour to 7 days. Search by ID anytime.
+
+## Stack
+
+Full Next.js monolith in `src/`. Neon Postgres free tier. Drizzle ORM. No Express. No blob service. Files stored as base64 text in Postgres. Free-tier caps: paste 3MB suggested, room 20MB suggested, default TTL 24h.
 
 ## Structure
 
@@ -28,26 +30,27 @@ src/
       rooms/[code]/entries/route.js
       rooms/[code]/entries/[entryId]/screenshots/[index]/route.js
       rooms/[code]/entries/[entryId]/files/[index]/route.js
+      cron/cleanup/route.js
   lib/
     db.js
     ids.js
     upload.js
-  models/
-    Gist.js
-    Room.js
-    RoomEntry.js
+  db/
+    schema.js
 ```
 
-Backend lives in `src/app/api`. Frontend pages live in `src/app`. Shared code lives in `src/lib`. Schemas live in `src/models`.
+Backend lives in `src/app/api`. Shared code lives in `src/lib`. Tables live in `src/db/schema.js`.
 
 ## Run
 
 ```bash
 npm install
 cp .env.example .env
-# edit MONGODB_URI
+# put pooled Neon string in DATABASE_URL, direct string in DIRECT_URL
+npm run db:push
 npm run dev
 ```
 
 Open http://localhost:3000
 Health: http://localhost:3000/api/health
+Cleanup: `GET /api/cron/cleanup` (daily via `vercel.json`, optional `CRON_SECRET` bearer)

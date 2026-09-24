@@ -1,6 +1,7 @@
 import crypto from "crypto";
-import Gist from "@/models/Gist.js";
-import Room from "@/models/Room.js";
+import { eq } from "drizzle-orm";
+import { getDb } from "./db.js";
+import { gists, rooms } from "@/db/schema.js";
 
 export function generateGistId() {
   const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
@@ -11,19 +12,21 @@ export function generateGistId() {
 }
 
 export async function generateUniqueGistId(maxAttempts = 50) {
+  const db = getDb();
   for (let i = 0; i < maxAttempts; i++) {
     const id = generateGistId();
-    const exists = await Gist.findOne({ id }).lean();
-    if (!exists) return id;
+    const rows = await db.select({ id: gists.id }).from(gists).where(eq(gists.id, id));
+    if (rows.length === 0) return id;
   }
   throw new Error("Unable to generate unique gist ID");
 }
 
 export async function generateUniqueRoomCode(maxAttempts = 50) {
+  const db = getDb();
   for (let i = 0; i < maxAttempts; i++) {
     const code = crypto.randomBytes(4).toString("hex").slice(0, 6).toLowerCase().padEnd(6, "0");
-    const exists = await Room.findOne({ code }).lean();
-    if (!exists) return code;
+    const rows = await db.select({ code: rooms.code }).from(rooms).where(eq(rooms.code, code));
+    if (rows.length === 0) return code;
   }
   throw new Error("Unable to generate unique room code");
 }
