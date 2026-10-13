@@ -8,11 +8,11 @@ export const metadata = {
   description: "Paste code, get a short ID, share with friends. Links expire automatically.",
 };
 
-const themeInit = `(function(){try{var t=localStorage.getItem("pasty-theme");document.documentElement.dataset.theme=(t==="light"||t==="sunset")?t:"grape";}catch(e){document.documentElement.dataset.theme="grape";}})();`;
+const themeInit = `(function(){try{var t=localStorage.getItem("pasty-theme");document.documentElement.dataset.theme=(t==="black")?"black":"light";}catch(e){document.documentElement.dataset.theme="light";}})();`;
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" data-theme="grape" suppressHydrationWarning>
+    <html lang="en" data-theme="light" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
       </head>

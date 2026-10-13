@@ -1,75 +1,13 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { ImagePlus, Paperclip, X } from "lucide-react";
-import { toast } from "react-toastify";
+import { Paperclip, X } from "lucide-react";
 import { formatSize } from "@/lib/format.js";
-import { BLOCKED, IMAGE_TYPES } from "@/lib/attach.js";
 
-export default function UploadZone({ screenshots, files, onChange, maxTotal = 10 * 1024 * 1024, maxShots = 5, maxFiles = 5, compact = false, hideDrop = false }) {
-  const [drag, setDrag] = useState(false);
-  const inputRef = useRef(null);
-
-  const total = [...screenshots, ...files].reduce((s, f) => s + f.size, 0);
-
-  const add = (incoming) => {
-    let running = total;
-    const ss = [];
-    const ff = [];
-    for (const file of Array.from(incoming || [])) {
-      const ext = file.name.toLowerCase().slice(file.name.lastIndexOf("."));
-      if (BLOCKED.includes(ext)) {
-        toast.error(`${file.name}: blocked file type`);
-        continue;
-      }
-      if (running + file.size > maxTotal) {
-        toast.error(`${file.name}: exceeds ${(maxTotal / 1024 / 1024).toFixed(0)}MB total`);
-        break;
-      }
-      const isImg = IMAGE_TYPES.includes(file.type);
-      if (isImg && screenshots.length + ss.length < maxShots) ss.push(file);
-      else if (!isImg && files.length + ff.length < maxFiles) ff.push(file);
-      else {
-        toast.error(`${file.name}: limit reached`);
-        continue;
-      }
-      running += file.size;
-    }
-    if (ss.length || ff.length) {
-      onChange({ screenshots: [...screenshots, ...ss], files: [...files, ...ff] });
-    }
-  };
-
+// Attachment tray: previews selected screenshots + file rows with remove.
+// Picking happens in Composer attach menu; validation in lib/attach.js.
+export default function UploadZone({ screenshots, files, onChange }) {
   return (
     <div>
-      {!hideDrop && (
-      <div
-        onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
-        onDragLeave={(e) => { e.preventDefault(); setDrag(false); }}
-        onDrop={(e) => { e.preventDefault(); setDrag(false); add(e.dataTransfer.files); }}
-        onClick={() => inputRef.current?.click()}
-        className="cursor-pointer rounded-md p-4 text-center transition-all"
-        style={{
-          backgroundColor: drag ? "var(--secondary-hover)" : "var(--input-bg)",
-          border: drag ? "2px dashed var(--primary-color)" : "2px dashed var(--border-color)",
-        }}
-      >
-        <div className="mb-1 flex items-center justify-center gap-2">
-          <ImagePlus className="h-5 w-5" style={{ color: "var(--muted-foreground)" }} />
-          <Paperclip className="h-5 w-5" style={{ color: "var(--muted-foreground)" }} />
-        </div>
-        <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
-          {drag ? "Drop files here…" : "Drag & drop or click to add screenshots & files"}
-        </p>
-        {!compact && (
-          <p className="mt-1 text-xs" style={{ color: "var(--muted-foreground)", opacity: 0.7 }}>
-            Images, ZIP, PDF, TXT · {formatSize(maxTotal)} total · {formatSize(total)} used
-          </p>
-        )}
-        <input ref={inputRef} type="file" multiple hidden onChange={(e) => { add(e.target.files); e.target.value = ""; }} />
-      </div>
-      )}
-
       {screenshots.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-2">
           {screenshots.map((f, i) => (
@@ -77,9 +15,10 @@ export default function UploadZone({ screenshots, files, onChange, maxTotal = 10
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={URL.createObjectURL(f)} alt={f.name} className="h-full w-full object-cover" />
               <button
-                onClick={(e) => { e.stopPropagation(); onChange({ screenshots: screenshots.filter((_, j) => j !== i), files }); }}
+                type="button"
+                onClick={() => onChange({ screenshots: screenshots.filter((_, j) => j !== i), files })}
                 className="absolute right-1 top-1 rounded-full p-0.5 opacity-0 transition-opacity group-hover:opacity-100"
-                style={{ backgroundColor: "rgba(0,0,0,0.7)", color: "#fff" }}
+                style={{ backgroundColor: "rgba(0,0,0,0.7)", color: "#fff", cursor: "pointer" }}
                 aria-label="Remove screenshot"
               >
                 <X className="h-3.5 w-3.5" />
@@ -101,7 +40,7 @@ export default function UploadZone({ screenshots, files, onChange, maxTotal = 10
                 <span className="truncate" style={{ color: "var(--foreground)" }}>{f.name}</span>
                 <span className="shrink-0 text-xs" style={{ color: "var(--muted-foreground)" }}>{formatSize(f.size)}</span>
               </div>
-              <button onClick={() => onChange({ screenshots, files: files.filter((_, j) => j !== i) })} style={{ color: "var(--muted-foreground)" }} aria-label="Remove file">
+              <button type="button" onClick={() => onChange({ screenshots, files: files.filter((_, j) => j !== i) })} style={{ color: "var(--muted-foreground)", cursor: "pointer" }} aria-label="Remove file">
                 <X className="h-3.5 w-3.5" />
               </button>
             </div>

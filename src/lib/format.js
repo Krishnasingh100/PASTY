@@ -39,10 +39,11 @@ export function deriveTitle(code = "", screenshots = [], files = []) {
   return "Untitled";
 }
 
-export async function copyText(text) {
+export async function copyText(text, successMsg) {
   const { toast } = await import("react-toastify");
   try {
     await navigator.clipboard.writeText(text);
+    if (successMsg) toast.success(successMsg);
   } catch {
     toast.error("Copy failed");
   }

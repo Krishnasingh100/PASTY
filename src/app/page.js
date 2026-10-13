@@ -8,11 +8,11 @@ import api from "@/lib/api.js";
 import { addIncoming } from "@/lib/attach.js";
 import { copyText, deriveTitle, formatSize, formatTTL } from "@/lib/format.js";
 import { tryFormat } from "@/lib/formatCode.js";
+import { pingLists } from "@/lib/visited.js";
 import Composer from "@/components/Composer.jsx";
 import PendingPreview from "@/components/PendingPreview.jsx";
+import IdBox from "@/components/IdBox.jsx";
 
-let seq = 0;
-const nextKey = () => `st-${Date.now()}-${seq++}`;
 const TTL_HOURS = 24;
 
 export default function CreatePage() {
@@ -20,20 +20,24 @@ export default function CreatePage() {
   const [code, setCode] = useState("");
   const [screenshots, setScreenshots] = useState([]);
   const [files, setFiles] = useState([]);
-  const [staged, setStaged] = useState([]);
-  const [results, setResults] = useState([]);
-  const [busyKey, setBusyKey] = useState(false);
+  // Single draft slot — Enter stages it above. Only one draft exists ever.
+  const [staged, setStaged] = useState(null);
+  // Single result — one Generate click makes exactly one ID + one link.
+  const [result, setResult] = useState(null);
+  const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState("");
   const [dragging, setDragging] = useState(false);
+  const busyRef = useRef(false);
   const dragCount = useRef(0);
   const threadRef = useRef(null);
 
   const draftTotal = [...screenshots, ...files].reduce((s, f) => s + f.size, 0);
+  const done = !!result && !staged;
 
   useEffect(() => {
     const el = threadRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [staged, results]);
+  }, [staged, result]);
 
   const onFiles = (incoming) => {
     const next = addIncoming(screenshots, files, incoming, { maxTotal: 10 * 1024 * 1024 });
@@ -41,7 +45,9 @@ export default function CreatePage() {
     setFiles(next.files);
   };
 
+  // Step 1: Enter / Send stages draft above. Replaces any old draft — no pile-up.
   const stage = () => {
+    if (busyRef.current) return;
     setFormError("");
     if (!code.trim() && screenshots.length === 0 && files.length === 0) {
       const msg = "Type something or attach a file first";
@@ -49,28 +55,30 @@ export default function CreatePage() {
       toast.error(msg);
       return;
     }
-    setStaged((prev) => [...prev, { key: nextKey(), code, screenshots, files }]);
+    setStaged({ key: `st-${Date.now()}`, code, screenshots, files });
     setCode("");
     setScreenshots([]);
     setFiles([]);
   };
 
-  const generateOne = async (key) => {
-    const item = staged.find((s) => s.key === key);
-    if (!item) return;
+  // Step 2: Generate button makes exactly ONE gist from the staged draft.
+  const generate = async () => {
+    if (busyRef.current || !staged) return;
     setFormError("");
-    setBusyKey(true);
+    busyRef.current = true;
+    setBusy(true);
     try {
-      const formatted = await tryFormat(item.code);
+      const formatted = await tryFormat(staged.code);
       const res = await api.createGist(
-        { code: formatted.trim(), title: deriveTitle(formatted, item.screenshots, item.files), ttlHours: TTL_HOURS },
-        item.screenshots,
-        item.files
+        { code: formatted.trim(), title: deriveTitle(formatted, staged.screenshots, staged.files), ttlHours: TTL_HOURS },
+        staged.screenshots,
+        staged.files
       );
       if (!res?.data?.id) throw new Error("Server returned no ID — try again");
       const link = `${window.location.origin}/code/${res.data.id}`;
-      setResults((prev) => [...prev, { id: res.data.id, link, ttlHours: res.data.ttlHours, title: res.data.title }]);
-      setStaged((prev) => prev.filter((s) => s.key !== key));
+      setResult({ id: res.data.id, link, ttlHours: res.data.ttlHours, title: res.data.title });
+      setStaged(null);
+      pingLists();
       try {
         await navigator.clipboard.writeText(link);
       } catch {}
@@ -80,13 +88,8 @@ export default function CreatePage() {
       setFormError(msg);
       toast.error(msg);
     } finally {
-      setBusyKey(false);
-    }
-  };
-
-  const generateAll = async () => {
-    for (const item of [...staged]) {
-      await generateOne(item.key);
+      busyRef.current = false;
+      setBusy(false);
     }
   };
 
@@ -94,10 +97,12 @@ export default function CreatePage() {
     setCode("");
     setScreenshots([]);
     setFiles([]);
-    setStaged([]);
-    setResults([]);
+    setStaged(null);
+    setResult(null);
     setFormError("");
   };
+
+  const stagedSize = staged ? [...staged.screenshots, ...staged.files].reduce((s, f) => s + f.size, 0) : 0;
 
   return (
     <div
@@ -128,59 +133,59 @@ export default function CreatePage() {
               </div>
             )}
 
-            {staged.length === 0 && results.length === 0 && (
+            {!staged && !result && (
               <div className="bubble bubble-in">
                 <div className="bubble-name">Pasty</div>
-                <div className="text-sm">Stage as many as you like below — each becomes its own link. Old ones stay until you generate or remove them.</div>
+                <div className="text-sm">Type below and press Enter — draft appears above, then hit Generate for one ID + one link.</div>
                 <div className="bubble-meta"><span>now</span></div>
               </div>
             )}
 
-            {staged.map((item) => {
-              const size = [...item.screenshots, ...item.files].reduce((s, f) => s + f.size, 0);
-              return (
-                <div key={item.key}>
-                  <PendingPreview code={item.code} screenshots={item.screenshots} files={item.files} />
-                  <div className="mt-1.5 flex items-center gap-2">
-                    <span className="chip">{item.screenshots.length + item.files.length > 0 ? `${formatSize(size)} attached` : "text only"}</span>
-                    <button
-                      type="button"
-                      onClick={() => setStaged((prev) => prev.filter((s) => s.key !== item.key))}
-                      disabled={busyKey}
-                      className="btn btn-ghost ms-auto"
-                      style={{ padding: "0.35rem 0.7rem", fontSize: "0.75rem" }}
-                      aria-label="Remove staged item"
-                    >
-                      <X className="h-3.5 w-3.5" /> Remove
-                    </button>
-                  </div>
+            {staged && (
+              <div>
+                <PendingPreview code={staged.code} screenshots={staged.screenshots} files={staged.files} />
+                <div className="mt-1.5 flex items-center gap-2">
+                  <span className="chip">{staged.screenshots.length + staged.files.length > 0 ? `${formatSize(stagedSize)} attached` : "text only"}</span>
+                  <button
+                    type="button"
+                    onClick={() => setStaged(null)}
+                    disabled={busy}
+                    className="btn btn-ghost ms-auto"
+                    style={{ padding: "0.35rem 0.7rem", fontSize: "0.75rem" }}
+                    aria-label="Remove staged item"
+                  >
+                    <X className="h-3.5 w-3.5" /> Remove
+                  </button>
                 </div>
-              );
-            })}
+              </div>
+            )}
 
-            {results.map((r) => (
-              <div key={r.id} className="bubble bubble-out rise">
-                <div className="bubble-name" style={{ color: "inherit", opacity: 0.85 }}>{r.title || "Untitled"}</div>
-                <div className="text-sm">ID <button type="button" onClick={() => copyText(r.id)} className="mono font-bold underline" style={{ cursor: "pointer" }}>{r.id}</button></div>
-                <div className="mono mt-1 break-all text-xs" style={{ opacity: 0.9 }}>{r.link}</div>
+            {result && (
+              <div className="bubble bubble-out rise" style={{ maxWidth: "100%" }}>
+                <div className="bubble-name" style={{ color: "inherit", opacity: 0.85 }}>{result.title || "Untitled"}</div>
+                <div className="space-y-2">
+                  <IdBox label="Paste ID" value={result.id} toastMsg="ID copied!" />
+                  <IdBox label="Paste link" value={result.link} toastMsg="Link copied!" />
+                </div>
                 <div className="mt-2 flex gap-1.5">
-                  <button type="button" onClick={() => copyText(r.link)} className="btn flex-1" style={{ padding: "0.35rem 0.6rem", fontSize: "0.75rem", backgroundColor: "rgba(0,0,0,0.25)", color: "inherit", border: "1px solid rgba(255,255,255,0.25)" }}>
+                  <button type="button" onClick={() => copyText(result.link, "Link copied!")} className="btn flex-1" style={{ padding: "0.35rem 0.6rem", fontSize: "0.75rem", backgroundColor: "rgba(0,0,0,0.25)", color: "inherit", border: "1px solid rgba(255,255,255,0.25)" }}>
                     Copy link
                   </button>
-                  <button type="button" onClick={() => router.push(`/code/${r.id}`)} className="btn flex-1" style={{ padding: "0.35rem 0.6rem", fontSize: "0.75rem", backgroundColor: "rgba(0,0,0,0.25)", color: "inherit", border: "1px solid rgba(255,255,255,0.25)" }}>
+                  <button type="button" onClick={() => router.push(`/code/${result.id}`)} className="btn flex-1" style={{ padding: "0.35rem 0.6rem", fontSize: "0.75rem", backgroundColor: "rgba(0,0,0,0.25)", color: "inherit", border: "1px solid rgba(255,255,255,0.25)" }}>
                     Open
                   </button>
                 </div>
                 <div className="bubble-meta">
-                  <span>link auto-copied · {formatTTL(r.ttlHours)}</span>
+                  <span>link auto-copied · {formatTTL(result.ttlHours)}</span>
                   <Check className="h-3.5 w-3.5" />
                 </div>
               </div>
-            ))}
+            )}
           </div>
         </div>
       </div>
 
+      {!done ? (
       <div className="sticky bottom-3 px-4 sm:px-6">
         {draftTotal > 0 && <div className="mb-1 text-xs muted">{formatSize(draftTotal)} / 10MB attached</div>}
         <Composer
@@ -195,17 +200,25 @@ export default function CreatePage() {
           onFiles={onFiles}
           attachIdPrefix="new"
         />
-        {staged.length > 0 && (
+        {staged && (
           <div className="mt-2 flex gap-2">
-            <button type="button" onClick={generateAll} disabled={busyKey} className="btn btn-primary flex-1" style={{ padding: "0.7rem" }}>
-              {busyKey ? "Generating…" : `Generate ID + link (${staged.length})`}
+            <button type="button" onClick={generate} disabled={busy} className="btn btn-primary flex-1" style={{ padding: "0.7rem" }}>
+              {busy ? "Generating…" : "Generate ID + link"}
             </button>
-            <button type="button" onClick={fresh} disabled={busyKey} className="btn btn-ghost">
+            <button type="button" onClick={fresh} disabled={busy} className="btn btn-ghost">
               Clear
             </button>
           </div>
         )}
       </div>
+      ) : (
+      <div className="px-4 sm:px-6">
+        <button type="button" onClick={fresh} className="btn btn-primary w-full" style={{ padding: "0.8rem" }}>
+          + New paste
+        </button>
+        <p className="mt-2 text-center text-xs muted">Share the ID + link above with any device — open it there, no login.</p>
+      </div>
+      )}
     </div>
   );
 }

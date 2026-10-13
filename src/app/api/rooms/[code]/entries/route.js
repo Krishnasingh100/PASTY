@@ -1,9 +1,10 @@
 import { and, eq, gt, sql } from "drizzle-orm";
 import { getDb } from "@/lib/db.js";
+import { MAX_ROOM_SIZE } from "@/lib/limits.js";
 import { roomAttachments, roomEntries, rooms } from "@/db/schema.js";
 import { parseUploadForm } from "@/lib/upload.js";
 
-export const MAX_ROOM_SIZE = 50 * 1024 * 1024;
+export { MAX_ROOM_SIZE };
 
 export async function POST(req, { params }) {
   try {

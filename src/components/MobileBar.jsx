@@ -28,13 +28,13 @@ export default function MobileBar() {
 
   return (
     <header className="mobilebar">
-      <Link href="/" className="flex items-center gap-1.5" style={{ textDecoration: "none" }}>
+      <Link href="/" className="flex shrink-0 items-center gap-1.5" style={{ textDecoration: "none" }}>
         <span className="flex h-7 w-7 items-center justify-center rounded-full" style={{ backgroundColor: "var(--primary-color)", color: "var(--primary-ink)" }}>
           <ClipboardPaste className="h-3.5 w-3.5" />
         </span>
-        <span className="text-sm font-extrabold tracking-[0.2em]" style={{ color: "var(--foreground)" }}>PASTY</span>
+        <span className="hidden text-sm font-extrabold tracking-[0.2em] min-[380px]:inline" style={{ color: "var(--foreground)" }}>PASTY</span>
       </Link>
-      <div className="ms-auto flex items-center gap-1">
+      <div className="ms-auto flex min-w-0 items-center gap-1">
         <Link href="/recent" className="icon-btn" aria-label="Find a paste">
           <Search className="h-4 w-4" />
         </Link>

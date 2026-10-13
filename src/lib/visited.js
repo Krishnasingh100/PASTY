@@ -17,3 +17,16 @@ export function addVisited(code, name) {
     window.localStorage.setItem(KEY, JSON.stringify(list.slice(0, 20)));
   } catch {}
 }
+
+export function pingLists() {
+  try {
+    window.dispatchEvent(new Event("pasty:update"));
+  } catch {}
+}
+
+export function removeVisited(code) {
+  try {
+    const list = getVisited().filter((r) => r.code !== code);
+    window.localStorage.setItem(KEY, JSON.stringify(list));
+  } catch {}
+}

@@ -1,8 +1,9 @@
 import { and, asc, desc, eq, gt, inArray } from "drizzle-orm";
 import { getDb } from "@/lib/db.js";
+import { MAX_ROOM_SIZE } from "@/lib/limits.js";
 import { roomAttachments, roomEntries, rooms } from "@/db/schema.js";
 
-export const MAX_ROOM_SIZE = 50 * 1024 * 1024;
+export { MAX_ROOM_SIZE };
 
 export async function GET(req, { params }) {
   try {
@@ -82,6 +83,33 @@ export async function GET(req, { params }) {
         expiresAt: room.expiresAt,
       },
     });
+  } catch (e) {
+    return Response.json({ success: false, message: "Internal server error" }, { status: 500 });
+  }
+}
+
+export async function DELETE(req, { params }) {
+  try {
+    const { code } = await params;
+    if (!code || code.length !== 6) {
+      return Response.json({ success: false, message: "Invalid room code" }, { status: 400 });
+    }
+    const db = getDb();
+    const key = code.toLowerCase();
+    const entries = await db
+      .select({ id: roomEntries.id })
+      .from(roomEntries)
+      .where(eq(roomEntries.roomCode, key));
+    const entryIds = entries.map((e) => e.id);
+    if (entryIds.length > 0) {
+      await db.delete(roomAttachments).where(inArray(roomAttachments.entryId, entryIds));
+      await db.delete(roomEntries).where(inArray(roomEntries.id, entryIds));
+    }
+    const deleted = await db.delete(rooms).where(eq(rooms.code, key)).returning({ code: rooms.code });
+    if (deleted.length === 0) {
+      return Response.json({ success: false, message: "Room not found or expired" }, { status: 404 });
+    }
+    return Response.json({ success: true, data: { code: key } });
   } catch (e) {
     return Response.json({ success: false, message: "Internal server error" }, { status: 500 });
   }

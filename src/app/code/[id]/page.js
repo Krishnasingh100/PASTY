@@ -9,6 +9,7 @@ import api, { downloadUrl } from "@/lib/api.js";
 import { copyText, formatSize, formatTTL, timeRemaining } from "@/lib/format.js";
 import CodeBlock from "@/components/CodeBlock.jsx";
 import FileBubble from "@/components/FileBubble.jsx";
+import IdBox from "@/components/IdBox.jsx";
 import Lightbox from "@/components/Lightbox.jsx";
 
 const time = (d) => new Date(d).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -59,12 +60,13 @@ export default function ViewPage() {
       <div className="chat">
         <div className="date-chip">{day(gist.createdAt)}</div>
         <div className="notice">
-          ID <button type="button" onClick={() => copyText(gist.id, "ID copied!")} className="mono font-bold underline" style={{ cursor: "pointer" }}>{gist.id}</button>
-          {" · "}{timeRemaining(gist.expiresAt)} · {formatTTL(gist.ttlHours)} total
+          <div className="mb-1 text-xs">{timeRemaining(gist.expiresAt)} · {formatTTL(gist.ttlHours)} total</div>
+          <IdBox label="Paste ID" value={gist.id} toastMsg="ID copied!" />
         </div>
 
         <div className="bubble bubble-in">
-          <div className="bubble-name">{gist.title || "Untitled"}</div>
+          {/* Title is auto-derived from the first code line — show it only when there is no code text, else text shows twice. */}
+          {!gist.code && <div className="bubble-name">{gist.title || "Untitled"}</div>}
           {gist.code ? (
             <CodeBlock code={gist.code} />
           ) : (
@@ -97,7 +99,9 @@ export default function ViewPage() {
 
         <div className="bubble bubble-out">
           <div className="text-sm">Share this chat:</div>
-          <div className="mono mt-1 break-all text-xs" style={{ opacity: 0.9 }}>{typeof window !== "undefined" ? window.location.href : `/code/${gist.id}`}</div>
+          <div className="mt-1">
+            <IdBox label="Share link" value={typeof window !== "undefined" ? window.location.href : `/code/${gist.id}`} toastMsg="Link copied!" />
+          </div>
           <div className="mt-2 flex gap-1.5">
             <button type="button" onClick={() => copyText(gist.code || "", "Code copied!")} className="btn flex-1" style={{ padding: "0.35rem 0.6rem", fontSize: "0.75rem", backgroundColor: "rgba(0,0,0,0.25)", color: "inherit", border: "1px solid rgba(255,255,255,0.25)" }}>
               Copy code

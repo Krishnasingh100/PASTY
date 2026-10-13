@@ -8,12 +8,12 @@ import { toast } from "react-toastify";
 import api, { downloadUrl } from "@/lib/api.js";
 import { addIncoming } from "@/lib/attach.js";
 import { isOwn, markOwn } from "@/lib/device.js";
-import { copyText, deriveTitle, formatSize, formatTTL, timeRemaining } from "@/lib/format.js";
+import { deriveTitle, formatSize, formatTTL, timeRemaining } from "@/lib/format.js";
 import { tryFormat } from "@/lib/formatCode.js";
-import { addVisited } from "@/lib/visited.js";
+import { addVisited, pingLists } from "@/lib/visited.js";
 import CodeBlock from "@/components/CodeBlock.jsx";
 import Composer from "@/components/Composer.jsx";
-import PendingPreview from "@/components/PendingPreview.jsx";
+import IdBox from "@/components/IdBox.jsx";
 import Lightbox from "@/components/Lightbox.jsx";
 
 const POLL_MS = 10000;
@@ -42,6 +42,7 @@ export default function RoomPage() {
       setRoom(res.data);
       setError("");
       addVisited(res.data.code, res.data.name);
+      pingLists();
     } catch (e) {
       console.error("Load room failed:", e);
       if (!silent) setError(e?.message || "Failed to load room");
@@ -155,9 +156,9 @@ export default function RoomPage() {
         </span>
         <div className="min-w-0 flex-1">
           <h1 className="truncate text-base font-bold sm:text-lg" style={{ color: "var(--foreground)" }}>{room.name}</h1>
-          <button type="button" onClick={() => copyText(room.code, "Room code copied!")} className="mono text-xs muted underline" style={{ cursor: "pointer" }} title="Copy room code">
-            {room.code} · tap to copy
-          </button>
+          <div className="mt-1 max-w-56">
+            <IdBox label="Room code" value={room.code} toastMsg="Room code copied!" />
+          </div>
         </div>
         <div className="flex w-full flex-col gap-1 sm:w-44">
           <div className="flex justify-between text-[11px] muted">
@@ -185,9 +186,9 @@ export default function RoomPage() {
           const own = entry._sending || isOwn(entry.id);
           return (
             <div key={entry.id} className={`bubble ${own ? "bubble-out" : "bubble-in"}`} style={entry._sending ? { opacity: 0.75 } : undefined}>
-              {!own && <div className="bubble-name">{entry.title}</div>}
-              {own && entry.title && entry.title !== "Untitled" && (
-                <div className="bubble-name" style={{ color: "inherit", opacity: 0.8 }}>{entry.title}</div>
+              {/* Title is auto-derived from the first code line — show it only when there is no code text, else text shows twice. */}
+              {!entry.code && entry.title && (
+                <div className="bubble-name" style={own ? { color: "inherit", opacity: 0.8 } : undefined}>{entry.title}</div>
               )}
               {entry.code && (
                 <div className="mt-1"><CodeBlock code={entry.code} /></div>
@@ -237,8 +238,6 @@ export default function RoomPage() {
           <span className="chip shrink-0">{formatSize(totalSel)} attached</span>
         </div>
       )}
-
-      <PendingPreview code={entryCode} screenshots={screenshots} files={files} />
 
       <Composer
         value={entryCode}

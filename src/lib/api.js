@@ -19,6 +19,7 @@ export const api = {
   },
 
   getGist: (id) => req(`/gists/${id}`),
+  deleteGist: (id) => req(`/gists/${id}`, { method: "DELETE" }),
   searchGist: (id) => req(`/gists/search/${id}`),
   listGists: (page = 1, limit = 20) => req(`/gists?page=${page}&limit=${limit}`),
 
@@ -29,6 +30,7 @@ export const api = {
     req("/rooms", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(roomData) }),
 
   getRoom: (code) => req(`/rooms/${code}`),
+  deleteRoom: (code) => req(`/rooms/${code}`, { method: "DELETE" }),
 
   addRoomEntry: async (code, entryData, screenshots = [], files = []) => {
     const form = new FormData();

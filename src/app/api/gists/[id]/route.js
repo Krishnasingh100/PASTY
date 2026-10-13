@@ -45,3 +45,22 @@ export async function GET(req, { params }) {
     return Response.json({ success: false, message: "Internal server error" }, { status: 500 });
   }
 }
+
+export async function DELETE(req, { params }) {
+  try {
+    const { id } = await params;
+    if (!id || id.length !== 4) {
+      return Response.json({ success: false, message: "Invalid gist ID format" }, { status: 400 });
+    }
+    const db = getDb();
+    const key = id.toLowerCase();
+    await db.delete(gistAttachments).where(eq(gistAttachments.gistId, key));
+    const deleted = await db.delete(gists).where(eq(gists.id, key)).returning({ id: gists.id });
+    if (deleted.length === 0) {
+      return Response.json({ success: false, message: "Paste not found or expired" }, { status: 404 });
+    }
+    return Response.json({ success: true, data: { id: key } });
+  } catch (e) {
+    return Response.json({ success: false, message: "Internal server error" }, { status: 500 });
+  }
+}

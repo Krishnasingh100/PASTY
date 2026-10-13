@@ -3,11 +3,12 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ClipboardPaste, Hash, MessageSquarePlus, Search, Users } from "lucide-react";
+import { ClipboardPaste, Hash, MessageSquarePlus, Search, Trash2, Users } from "lucide-react";
 import { toast } from "react-toastify";
 import api from "@/lib/api.js";
-import { extractId, timeRemaining } from "@/lib/format.js";
-import { getVisited } from "@/lib/visited.js";
+import { copyText, extractId, timeRemaining } from "@/lib/format.js";
+import { getVisited, pingLists, removeVisited } from "@/lib/visited.js";
+import IdBox from "./IdBox.jsx";
 import ThemeToggle from "./ThemeToggle.jsx";
 
 export default function Sidebar() {
@@ -15,16 +16,22 @@ export default function Sidebar() {
   const [q, setQ] = useState("");
   const [joinCode, setJoinCode] = useState("");
   const [roomBusy, setRoomBusy] = useState(false);
+  const [expandedId, setExpandedId] = useState(null);
   const [pastes, setPastes] = useState([]);
   const [rooms, setRooms] = useState([]);
+  const [deleting, setDeleting] = useState(null);
 
   useEffect(() => {
     let live = true;
-    api.listGists(1, 8).then((r) => live && setPastes(r.data || [])).catch(() => {});
-    setRooms(getVisited());
-    const onFocus = () => live && setRooms(getVisited());
-    window.addEventListener("focus", onFocus);
-    return () => { live = false; window.removeEventListener("focus", onFocus); };
+    const reload = () => {
+      if (!live) return;
+      api.listGists(1, 8).then((r) => live && setPastes(r.data || [])).catch(() => {});
+      setRooms(getVisited());
+    };
+    reload();
+    window.addEventListener("focus", reload);
+    window.addEventListener("pasty:update", reload);
+    return () => { live = false; window.removeEventListener("focus", reload); window.removeEventListener("pasty:update", reload); };
   }, []);
 
   const go = () => {
@@ -52,6 +59,46 @@ export default function Sidebar() {
       toast.error(e?.message || "Could not create room");
     } finally {
       setRoomBusy(false);
+    }
+  };
+
+  const deletePaste = async (id) => {
+    if (deleting) return;
+    if (!window.confirm(`Delete paste ${id}? Gone forever.`)) return;
+    setDeleting(`paste:${id}`);
+    try {
+      await api.deleteGist(id);
+      setPastes((prev) => prev.filter((g) => g.id !== id));
+      if (expandedId === id) setExpandedId(null);
+      pingLists();
+      toast.success("Paste deleted");
+      if (typeof window !== "undefined" && window.location.pathname === `/code/${id}`) router.push("/");
+    } catch (e) {
+      console.error("Delete paste failed:", e);
+      toast.error(e?.message || "Could not delete paste");
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  const deleteRoom = async (code) => {
+    if (deleting) return;
+    if (!window.confirm(`Delete room ${code}? All messages gone forever.`)) return;
+    setDeleting(`room:${code}`);
+    try {
+      try {
+        await api.deleteRoom(code);
+      } catch (e) {
+        // Room may already be expired on server — still drop it locally.
+        console.warn("Server room delete failed, removing locally:", e?.message);
+      }
+      removeVisited(code);
+      setRooms(getVisited());
+      pingLists();
+      toast.success("Room deleted");
+      if (typeof window !== "undefined" && window.location.pathname === `/room/${code}`) router.push("/");
+    } finally {
+      setDeleting(null);
     }
   };
 
@@ -107,30 +154,83 @@ export default function Sidebar() {
       <div className="sidebar-list">
         <div className="sidebar-title">Pastes</div>
         {pastes.length === 0 && <div className="sidebar-empty">Nothing yet.</div>}
-        {pastes.map((g) => (
-          <Link key={g.id} href={`/code/${g.id}`} className="side-item">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full" style={{ backgroundColor: "var(--secondary-hover)", color: "var(--accent-color)" }}>
-              <Hash className="h-4 w-4" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium" style={{ color: "var(--foreground)" }}>{g.title || "Untitled"}</span>
-              <span className="mono block truncate text-xs muted">{g.id} · {timeRemaining(g.expiresAt)}</span>
-            </span>
-          </Link>
-        ))}
+        {pastes.map((g) => {
+          const open = expandedId === g.id;
+          const link = typeof window !== "undefined" ? `${window.location.origin}/code/${g.id}` : `/code/${g.id}`;
+          return (
+            <div key={g.id} className="side-item-col">
+              <div className="flex items-center gap-1">
+                <button type="button" onClick={() => setExpandedId(open ? null : g.id)} className="side-item min-w-0 flex-1 text-left" style={{ cursor: "pointer" }}>
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full" style={{ backgroundColor: "var(--secondary-hover)", color: "var(--accent-color)" }}>
+                    <Hash className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium" style={{ color: "var(--foreground)" }}>{g.title || "Untitled"}</span>
+                    <span className="mono block truncate text-xs muted">{g.id} · {timeRemaining(g.expiresAt)}</span>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => deletePaste(g.id)}
+                  disabled={deleting === `paste:${g.id}`}
+                  className="icon-btn shrink-0"
+                  aria-label={`Delete paste ${g.id}`}
+                  title={`Delete paste ${g.id}`}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+              {open && (
+                <div className="rise mb-1 ml-12 mr-1 space-y-2 rounded-lg p-2.5" style={{ backgroundColor: "var(--input-bg)", border: "1px solid var(--border-color)" }}>
+                  <IdBox label="Paste ID" value={g.id} toastMsg="ID copied!" />
+                  <IdBox label="Paste link" value={link} toastMsg="Link copied!" />
+                  <div className="flex gap-1.5">
+                    <button type="button" onClick={() => copyText(link)} className="btn btn-ghost flex-1" style={{ padding: "0.3rem 0.6rem", fontSize: "0.7rem" }}>
+                      Copy link
+                    </button>
+                    <button type="button" onClick={() => router.push(`/code/${g.id}`)} className="btn btn-primary flex-1" style={{ padding: "0.3rem 0.6rem", fontSize: "0.7rem" }}>
+                      Open
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => deletePaste(g.id)}
+                    disabled={deleting === `paste:${g.id}`}
+                    className="btn btn-ghost w-full"
+                    style={{ padding: "0.3rem 0.6rem", fontSize: "0.7rem", color: "var(--danger-color)" }}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" /> {deleting === `paste:${g.id}` ? "Deleting…" : "Delete paste"}
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
 
         <div className="sidebar-title">Rooms</div>
         {rooms.length === 0 && <div className="sidebar-empty">No recent rooms.</div>}
         {rooms.map((r) => (
-          <Link key={r.code} href={`/room/${r.code}`} className="side-item">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold" style={{ backgroundColor: "var(--secondary-hover)", color: "var(--primary-color)" }}>
-              {(r.name || "R").slice(0, 1).toUpperCase()}
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium" style={{ color: "var(--foreground)" }}>{r.name || r.code}</span>
-              <span className="mono block truncate text-xs muted">{r.code}</span>
-            </span>
-          </Link>
+          <div key={r.code} className="flex items-center gap-1">
+            <Link href={`/room/${r.code}`} className="side-item min-w-0 flex-1">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold" style={{ backgroundColor: "var(--secondary-hover)", color: "var(--primary-color)" }}>
+                {(r.name || "R").slice(0, 1).toUpperCase()}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium" style={{ color: "var(--foreground)" }}>{r.name || r.code}</span>
+                <span className="mono block truncate text-xs muted">{r.code}</span>
+              </span>
+            </Link>
+            <button
+              type="button"
+              onClick={() => deleteRoom(r.code)}
+              disabled={deleting === `room:${r.code}`}
+              className="icon-btn shrink-0"
+              aria-label={`Delete room ${r.code}`}
+              title={`Delete room ${r.code}`}
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
         ))}
       </div>
     </aside>
