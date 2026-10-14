@@ -40,7 +40,8 @@ export async function GET(req, { params }) {
     const room = roomRows[0];
     const topId = headRows[0]?.id || 0;
     // Cheap-poll fast path: nothing new, skip entries + attachments entirely.
-    if (sinceId > 0 && sinceId === topId && knownTotal != null && Number(knownTotal) === room.totalSize) {
+    // Works for empty rooms too (0 == 0).
+    if (sinceId === topId && knownTotal != null && Number(knownTotal) === room.totalSize) {
       return Response.json({ success: true, unchanged: true, data: { code: room.code, totalSize: room.totalSize, topId } });
     }
     const entries = await db

@@ -44,7 +44,8 @@ export default function RoomPage() {
       // Silent ticks send cursor. Server answers { unchanged:true } with 2 cheap
       // indexed queries, no payload, no re-render.
       const c = cursor.current;
-      const res = await api.getRoom(code, silent && c.topId > 0 ? { sinceId: c.topId, totalSize: c.totalSize } : undefined);
+      const haveCursor = silent && c.totalSize >= 0;
+      const res = await api.getRoom(code, haveCursor ? { sinceId: c.topId, totalSize: c.totalSize } : undefined);
       if (res?.unchanged) return;
       if (!res?.data?.code) throw new Error("Bad room response");
       cursor.current = { topId: res.data.topId || 0, totalSize: res.data.totalSize };
@@ -67,8 +68,10 @@ export default function RoomPage() {
     load();
     timer.current = setInterval(() => { if (!document.hidden) load(true); }, POLL_MS);
     const onFocus = () => load(true);
+    const onVis = () => { if (!document.hidden) load(true); };
     window.addEventListener("focus", onFocus);
-    return () => { clearInterval(timer.current); window.removeEventListener("focus", onFocus); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => { clearInterval(timer.current); window.removeEventListener("focus", onFocus); document.removeEventListener("visibilitychange", onVis); };
   }, [code, load]);
 
   const onFiles = (incoming) => {

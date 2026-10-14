@@ -3,11 +3,11 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowRight, Clock3, Search, Users } from "lucide-react";
+import { ArrowRight, Search, Users } from "lucide-react";
 import { toast } from "react-toastify";
 import api from "@/lib/api.js";
-import { extractId, timeRemaining } from "@/lib/format.js";
-import { peekRoomNum, commitRoomNum } from "@/lib/visited.js";
+import { extractId } from "@/lib/format.js";
+import { peekRoomNum, commitRoomNum, addVisited, getPastes } from "@/lib/visited.js";
 
 export default function SearchPage() {
   const router = useRouter();
@@ -16,10 +16,14 @@ export default function SearchPage() {
   const [joinCode, setJoinCode] = useState("");
   const [roomBusy, setRoomBusy] = useState(false);
   const [latest, setLatest] = useState([]);
-  const [latestError, setLatestError] = useState("");
 
+  // Only pastes created on THIS device. Never the global list.
   useEffect(() => {
-    api.listGists(1, 10).then((r) => setLatest(r.data || [])).catch((e) => setLatestError(e.message));
+    const reload = () => setLatest(getPastes());
+    reload();
+    window.addEventListener("pasty:update", reload);
+    window.addEventListener("focus", reload);
+    return () => { window.removeEventListener("pasty:update", reload); window.removeEventListener("focus", reload); };
   }, []);
 
   const search = async () => {
@@ -44,6 +48,7 @@ export default function SearchPage() {
   const join = () => {
     const code = joinCode.trim().toLowerCase();
     if (code.length !== 6) return toast.error("Enter a 6-character room code");
+    addVisited(code, code, false);
     router.push(`/room/${code}`);
   };
 
@@ -54,6 +59,7 @@ export default function SearchPage() {
     try {
       const res = await api.createRoom({ name: `Room ${num}`, ttlHours: 24 });
       commitRoomNum(num);
+      addVisited(res.data.code, res.data.name || `Room ${num}`, true);
       router.push(`/room/${res.data.code}`);
     } catch (e) {
       console.error("Create room failed:", e);
@@ -112,11 +118,9 @@ export default function SearchPage() {
       </section>
 
       <section className="card p-4 sm:p-5">
-        <h2 className="mb-3 text-sm font-bold uppercase tracking-wider muted">Latest pastes</h2>
-        {latestError ? (
-          <p className="text-sm muted">Could not load list: {latestError}</p>
-        ) : latest.length === 0 ? (
-          <p className="text-sm muted">No pastes yet — create the first one.</p>
+        <h2 className="mb-3 text-sm font-bold uppercase tracking-wider muted">Your pastes</h2>
+        {latest.length === 0 ? (
+          <p className="text-sm muted">No pastes on this device yet — create one from home.</p>
         ) : (
           <ul className="divide-y" style={{ borderColor: "var(--border-color)" }}>
             {latest.map((g) => (
@@ -124,9 +128,6 @@ export default function SearchPage() {
                 <Link href={`/code/${g.id}`} className="flex items-center gap-2 py-2.5" style={{ textDecoration: "none", color: "var(--foreground)" }}>
                   <span className="chip mono">{g.id}</span>
                   <span className="min-w-0 flex-1 truncate text-sm">{g.title || "Untitled"}</span>
-                  <span className="hidden shrink-0 items-center gap-1 text-xs muted sm:inline-flex">
-                    <Clock3 className="h-3 w-3" />{timeRemaining(g.expiresAt)}
-                  </span>
                   <ArrowRight className="h-4 w-4 shrink-0" style={{ color: "var(--primary-color)" }} />
                 </Link>
               </li>

@@ -516,8 +516,8 @@ button:focus-visible {
   box-shadow: var(--shadow);
 }
 
-/* Touch devices (mobile + tablet): no room for hint text, hide it. */
-@media (pointer: coarse) {
+/* Small screens (mobile + tablet): no room for hint text, hide it. */
+@media (pointer: coarse), (max-width: 768px) {
   .composer-box::placeholder {
     color: transparent;
   }

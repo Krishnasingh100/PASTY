@@ -10,10 +10,15 @@ export function getVisited() {
   }
 }
 
-export function addVisited(code, name) {
+export function addVisited(code, name, mine) {
   try {
+    const prev = getVisited().find((r) => r.code === code);
+    // Explicit create/join calls set the flag. Plain opens preserve it.
+    // Brand-new origin-unknown opens (shared link) count as joined.
+    // Legacy entries without flag read as yours at render.
+    const flag = mine === true ? true : mine === false ? false : prev ? prev.mine : false;
     const list = getVisited().filter((r) => r.code !== code);
-    list.unshift({ code, name: name || code, at: Date.now() });
+    list.unshift({ code, name: name || code, at: Date.now(), mine: flag });
     window.localStorage.setItem(KEY, JSON.stringify(list.slice(0, 20)));
   } catch {}
 }

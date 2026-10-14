@@ -7,7 +7,7 @@ import { ClipboardPaste, Hash, MessageSquarePlus, Search, Trash2, Users } from "
 import { toast } from "react-toastify";
 import api from "@/lib/api.js";
 import { copyText, extractId, timeRemaining } from "@/lib/format.js";
-import { getVisited, pingLists, removeVisited, peekRoomNum, commitRoomNum, getPastes, removePaste } from "@/lib/visited.js";
+import { getVisited, pingLists, removeVisited, peekRoomNum, commitRoomNum, getPastes, removePaste, addVisited } from "@/lib/visited.js";
 import IdBox from "./IdBox.jsx";
 import ConfirmDialog from "./ConfirmDialog.jsx";
 import ThemeToggle from "./ThemeToggle.jsx";
@@ -66,6 +66,7 @@ export default function Sidebar({ onNavigate }) {
     const code = joinCode.trim().toLowerCase();
     if (code.length !== 6) return toast.error("Enter a 6-character room code");
     setJoinCode("");
+    addVisited(code, code, false);
     onNavigate?.();
     router.push(`/room/${code}`);
   };
@@ -77,6 +78,7 @@ export default function Sidebar({ onNavigate }) {
     try {
       const res = await api.createRoom({ name: `Room ${num}`, ttlHours: 24 });
       commitRoomNum(num);
+      addVisited(res.data.code, res.data.name || `Room ${num}`, true);
       onNavigate?.();
       router.push(`/room/${res.data.code}`);
     } catch (e) {
@@ -126,11 +128,16 @@ export default function Sidebar({ onNavigate }) {
     if (deleting) return;
     setDeleting(`room:${code}`);
     try {
-      try {
-        await api.deleteRoom(code);
-      } catch (e) {
-        // Room may already be expired on server — still drop it locally.
-        console.warn("Server room delete failed, removing locally:", e?.message);
+      // Joined rooms leave locally only — never delete someone else's room
+      // on the server.
+      const isMine = rooms.find((r) => r.code === code)?.mine !== false;
+      if (isMine) {
+        try {
+          await api.deleteRoom(code);
+        } catch (e) {
+          // Room may already be expired on server — still drop it locally.
+          console.warn("Server room delete failed, removing locally:", e?.message);
+        }
       }
       removeVisited(code);
       setRooms(getVisited());
@@ -208,7 +215,7 @@ export default function Sidebar({ onNavigate }) {
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-medium" style={{ color: "var(--foreground)" }}>{g.title || "Untitled"}</span>
-                    <span className="mono block truncate text-xs muted">{g.id} · {timeRemaining(g.expiresAt)}</span>
+                    <span className="mono block truncate text-xs muted">{g.id}{g.expiresAt ? ` · ${timeRemaining(g.expiresAt)}` : ""}</span>
                   </span>
                 </button>
                 <button
@@ -248,9 +255,9 @@ export default function Sidebar({ onNavigate }) {
           );
         })}
 
-        <div className="sidebar-title">Rooms</div>
-        {rooms.length === 0 && <div className="sidebar-empty">No recent rooms.</div>}
-        {rooms.map((r) => (
+        <div className="sidebar-title">Your rooms</div>
+        {rooms.filter((r) => r.mine !== false).length === 0 && <div className="sidebar-empty">None yet — create one above.</div>}
+        {rooms.filter((r) => r.mine !== false).map((r) => (
           <div key={r.code} className="flex items-center gap-1">
             <Link href={`/room/${r.code}`} onClick={onNavigate} className="side-item min-w-0 flex-1">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold" style={{ backgroundColor: "var(--secondary-hover)", color: "var(--primary-color)" }}>
@@ -268,6 +275,32 @@ export default function Sidebar({ onNavigate }) {
               className="icon-btn shrink-0"
               aria-label={`Delete room ${r.code}`}
               title={`Delete room ${r.code}`}
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+        ))}
+
+        <div className="sidebar-title">Joined rooms</div>
+        {rooms.filter((r) => r.mine === false).length === 0 && <div className="sidebar-empty">No joined rooms.</div>}
+        {rooms.filter((r) => r.mine === false).map((r) => (
+          <div key={r.code} className="flex items-center gap-1">
+            <Link href={`/room/${r.code}`} onClick={onNavigate} className="side-item min-w-0 flex-1">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold" style={{ backgroundColor: "var(--secondary-hover)", color: "var(--primary-color)" }}>
+                {(r.name || "R").slice(0, 1).toUpperCase()}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium" style={{ color: "var(--foreground)" }}>{r.name || r.code}</span>
+                <span className="mono block truncate text-xs muted">{r.code}</span>
+              </span>
+            </Link>
+            <button
+              type="button"
+              onClick={() => setConfirm({ kind: "room", code: r.code })}
+              disabled={deleting === `room:${r.code}`}
+              className="icon-btn shrink-0"
+              aria-label={`Remove room ${r.code}`}
+              title={`Remove room ${r.code}`}
             >
               <Trash2 className="h-4 w-4" />
             </button>
