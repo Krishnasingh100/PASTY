@@ -231,8 +231,6 @@ export default function RoomPage() {
         attachIdPrefix="room"
       />
 
-      <p className="text-center text-xs muted">Created {new Date(room.createdAt).toLocaleString()} · auto-refresh 3s</p>
-
       {lightbox && (
         <Lightbox
           src={api.roomScreenshotUrl(room.code, lightbox.entryId, lightbox.index)}

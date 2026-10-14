@@ -120,9 +120,7 @@ export default function CreatePage() {
       setResults((prev) => [...prev, { id: res.data.id, ttlHours: res.data.ttlHours, title: res.data.title }]);
       setStaged([]);
       pingLists();
-      try {
-        await navigator.clipboard.writeText(res.data.id);
-      } catch {}
+      copyText(res.data.id, "ID copied!");
     } catch (e) {
       console.error("Create paste failed:", e);
       const msg = e?.message || "Could not create ID";

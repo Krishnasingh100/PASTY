@@ -41,11 +41,36 @@ export function deriveTitle(code = "", screenshots = [], files = []) {
   return "Untitled";
 }
 
+async function writeClipboard(text) {
+  // Modern path. Fails on some mobile WebViews / non-secure contexts.
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch {}
+  }
+  // Legacy fallback: hidden textarea + execCommand. Works on iOS Safari.
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.setAttribute("readonly", "");
+  ta.style.cssText = "position:fixed;top:0;left:0;opacity:0;";
+  document.body.appendChild(ta);
+  ta.select();
+  ta.setSelectionRange(0, ta.value.length);
+  try {
+    if (!document.execCommand("copy")) throw new Error("execCommand copy failed");
+  } finally {
+    document.body.removeChild(ta);
+  }
+}
+
 export async function copyText(text, successMsg) {
   try {
-    await navigator.clipboard.writeText(text);
+    await writeClipboard(text);
     if (successMsg) toast.success(successMsg);
+    return true;
   } catch {
-    toast.error("Copy failed");
+    toast.error("Copy failed — long-press the text to copy");
+    return false;
   }
 }
