@@ -6,24 +6,33 @@ import { AlertTriangle, Check, X } from "lucide-react";
 import { toast } from "react-toastify";
 import api from "@/lib/api.js";
 import { addIncoming } from "@/lib/attach.js";
-import { copyText, deriveTitle, formatSize, formatTTL } from "@/lib/format.js";
+import { copyText, formatSize, formatTTL } from "@/lib/format.js";
 import { tryFormat } from "@/lib/formatCode.js";
-import { pingLists } from "@/lib/visited.js";
+import { pingLists, peekPasteNum, commitPasteNum } from "@/lib/visited.js";
 import Composer from "@/components/Composer.jsx";
 import PendingPreview from "@/components/PendingPreview.jsx";
 import IdBox from "@/components/IdBox.jsx";
 
-const TTL_HOURS = 24;
+const MIN_TTL = 1;
+const MAX_TTL = 168;
+const MAX_STAGED = 1;
+
+let seq = 0;
+const nextKey = () => `st-${Date.now()}-${seq++}`;
+// Same text + same files = same draft. Stops double-Enter duplicates.
+const draftSig = (code, screenshots, files) =>
+  [code.trim(), ...[...screenshots, ...files].map((f) => `${f.name}:${f.size}:${f.lastModified || 0}`)].join("|");
 
 export default function CreatePage() {
   const router = useRouter();
   const [code, setCode] = useState("");
   const [screenshots, setScreenshots] = useState([]);
   const [files, setFiles] = useState([]);
-  // Single draft slot — Enter stages it above. Only one draft exists ever.
-  const [staged, setStaged] = useState(null);
-  // Single result — one Generate click makes exactly one ID + one link.
-  const [result, setResult] = useState(null);
+  // Queue — every Enter appends a new draft above. Old drafts stay.
+  const [staged, setStaged] = useState([]);
+  // One result per generated draft.
+  const [results, setResults] = useState([]);
+  const [ttlHours, setTtlHours] = useState(24);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState("");
   const [dragging, setDragging] = useState(false);
@@ -32,22 +41,26 @@ export default function CreatePage() {
   const threadRef = useRef(null);
 
   const draftTotal = [...screenshots, ...files].reduce((s, f) => s + f.size, 0);
-  const done = !!result && !staged;
 
   useEffect(() => {
     const el = threadRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [staged, result]);
+  }, [staged, results]);
 
   const onFiles = (incoming) => {
+    // UploadZone remove buttons send back { screenshots, files } directly.
+    if (incoming && Array.isArray(incoming.screenshots) && Array.isArray(incoming.files)) {
+      setScreenshots(incoming.screenshots);
+      setFiles(incoming.files);
+      return;
+    }
     const next = addIncoming(screenshots, files, incoming, { maxTotal: 10 * 1024 * 1024 });
     setScreenshots(next.screenshots);
     setFiles(next.files);
   };
 
-  // Step 1: Enter / Send stages draft above. Replaces any old draft — no pile-up.
+  // Step 1: Enter / Send appends a draft above. Never replaces old drafts.
   const stage = () => {
-    if (busyRef.current) return;
     setFormError("");
     if (!code.trim() && screenshots.length === 0 && files.length === 0) {
       const msg = "Type something or attach a file first";
@@ -55,36 +68,63 @@ export default function CreatePage() {
       toast.error(msg);
       return;
     }
-    setStaged({ key: `st-${Date.now()}`, code, screenshots, files });
+    if (staged.length >= MAX_STAGED) {
+      const msg = "One box at a time — generate or remove it first";
+      setFormError(msg);
+      toast.error(msg);
+      return;
+    }
+    const sig = draftSig(code, screenshots, files);
+    if (staged.some((s) => s.sig === sig)) {
+      toast.info("Already staged above");
+      return;
+    }
+    setStaged((prev) => [...prev, { key: nextKey(), sig, code, screenshots, files }]);
     setCode("");
     setScreenshots([]);
     setFiles([]);
   };
 
-  // Step 2: Generate button makes exactly ONE gist from the staged draft.
-  const generate = async () => {
-    if (busyRef.current || !staged) return;
+  // Step 2: Generate merges every staged box into ONE paste — always 1 ID.
+  const generateAll = async () => {
+    if (busyRef.current || staged.length === 0) return;
     setFormError("");
+    // One paste caps: 10MB total, 5 screenshots, 5 files.
+    const shots = staged.flatMap((s) => s.screenshots);
+    const docs = staged.flatMap((s) => s.files);
+    const totalSize = [...shots, ...docs].reduce((sum, f) => sum + f.size, 0);
+    if (shots.length > 5 || docs.length > 5 || totalSize > 10 * 1024 * 1024) {
+      const msg = "Too much for one ID — remove a box (max 5 photos, 5 files, 10MB total)";
+      setFormError(msg);
+      toast.error(msg);
+      return;
+    }
     busyRef.current = true;
     setBusy(true);
+    const queue = [...staged];
+    const num = peekPasteNum();
     try {
-      const formatted = await tryFormat(staged.code);
+      const parts = [];
+      for (const item of queue) {
+        const formatted = await tryFormat(item.code);
+        if (formatted.trim()) parts.push(formatted.trim());
+      }
       const res = await api.createGist(
-        { code: formatted.trim(), title: deriveTitle(formatted, staged.screenshots, staged.files), ttlHours: TTL_HOURS },
-        staged.screenshots,
-        staged.files
+        { code: parts.join("\n\n"), title: `Paste ${num}`, ttlHours },
+        shots,
+        docs
       );
       if (!res?.data?.id) throw new Error("Server returned no ID — try again");
-      const link = `${window.location.origin}/code/${res.data.id}`;
-      setResult({ id: res.data.id, link, ttlHours: res.data.ttlHours, title: res.data.title });
-      setStaged(null);
+      commitPasteNum(num);
+      setResults((prev) => [...prev, { id: res.data.id, ttlHours: res.data.ttlHours, title: res.data.title }]);
+      setStaged([]);
       pingLists();
       try {
-        await navigator.clipboard.writeText(link);
+        await navigator.clipboard.writeText(res.data.id);
       } catch {}
     } catch (e) {
       console.error("Create paste failed:", e);
-      const msg = e?.message || "Could not create link";
+      const msg = e?.message || "Could not create ID";
       setFormError(msg);
       toast.error(msg);
     } finally {
@@ -97,12 +137,10 @@ export default function CreatePage() {
     setCode("");
     setScreenshots([]);
     setFiles([]);
-    setStaged(null);
-    setResult(null);
+    setStaged([]);
+    setResults([]);
     setFormError("");
   };
-
-  const stagedSize = staged ? [...staged.screenshots, ...staged.files].reduce((s, f) => s + f.size, 0) : 0;
 
   return (
     <div
@@ -133,59 +171,71 @@ export default function CreatePage() {
               </div>
             )}
 
-            {!staged && !result && (
+            {staged.length === 0 && results.length === 0 && (
               <div className="bubble bubble-in">
                 <div className="bubble-name">Pasty</div>
-                <div className="text-sm">Type below and press Enter — draft appears above, then hit Generate for one ID + one link.</div>
+                <div className="text-sm">Type below, press Enter — one box above holds text plus images. Generate makes 1 ID.</div>
                 <div className="bubble-meta"><span>now</span></div>
               </div>
             )}
 
-            {staged && (
-              <div>
-                <PendingPreview code={staged.code} screenshots={staged.screenshots} files={staged.files} />
-                <div className="mt-1.5 flex items-center gap-2">
-                  <span className="chip">{staged.screenshots.length + staged.files.length > 0 ? `${formatSize(stagedSize)} attached` : "text only"}</span>
+            {staged.map((item, i) => {
+              const size = [...item.screenshots, ...item.files].reduce((s, f) => s + f.size, 0);
+              return (
+                <div key={item.key}>
+                  <PendingPreview code={item.code} screenshots={item.screenshots} files={item.files} />
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <span className="chip">{item.screenshots.length + item.files.length > 0 ? `${formatSize(size)} attached` : "text only"}</span>
+                    <button
+                      type="button"
+                      onClick={() => setStaged((prev) => prev.filter((s) => s.key !== item.key))}
+                      disabled={busy}
+                      className="btn btn-ghost ms-auto"
+                      style={{ padding: "0.35rem 0.7rem", fontSize: "0.75rem" }}
+                      aria-label={`Remove draft ${i + 1}`}
+                    >
+                      <X className="h-3.5 w-3.5" /> Remove
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+
+            {results.map((r) => (
+              <div key={r.id} className="bubble bubble-out rise" style={{ maxWidth: "100%" }}>
+                <div className="bubble-name flex items-center gap-2" style={{ color: "inherit", opacity: 0.85 }}>
+                  <span className="min-w-0 flex-1 truncate">{r.title || "Untitled"}</span>
                   <button
                     type="button"
-                    onClick={() => setStaged(null)}
-                    disabled={busy}
-                    className="btn btn-ghost ms-auto"
-                    style={{ padding: "0.35rem 0.7rem", fontSize: "0.75rem" }}
-                    aria-label="Remove staged item"
+                    onClick={() => setResults((prev) => prev.filter((x) => x.id !== r.id))}
+                    className="icon-btn shrink-0"
+                    style={{ padding: "0.15rem", color: "inherit" }}
+                    aria-label={`Dismiss ${r.id}`}
                   >
-                    <X className="h-3.5 w-3.5" /> Remove
+                    <X className="h-3.5 w-3.5" />
                   </button>
                 </div>
-              </div>
-            )}
-
-            {result && (
-              <div className="bubble bubble-out rise" style={{ maxWidth: "100%" }}>
-                <div className="bubble-name" style={{ color: "inherit", opacity: 0.85 }}>{result.title || "Untitled"}</div>
                 <div className="space-y-2">
-                  <IdBox label="Paste ID" value={result.id} toastMsg="ID copied!" />
-                  <IdBox label="Paste link" value={result.link} toastMsg="Link copied!" />
+                  <IdBox label="Paste ID" value={r.id} toastMsg="ID copied!" />
                 </div>
                 <div className="mt-2 flex gap-1.5">
-                  <button type="button" onClick={() => copyText(result.link, "Link copied!")} className="btn flex-1" style={{ padding: "0.35rem 0.6rem", fontSize: "0.75rem", backgroundColor: "rgba(0,0,0,0.25)", color: "inherit", border: "1px solid rgba(255,255,255,0.25)" }}>
-                    Copy link
+                  <button type="button" onClick={() => copyText(r.id, "ID copied!")} className="btn flex-1" style={{ padding: "0.35rem 0.6rem", fontSize: "0.75rem", backgroundColor: "rgba(0,0,0,0.25)", color: "inherit", border: "1px solid rgba(255,255,255,0.25)" }}>
+                    Copy ID
                   </button>
-                  <button type="button" onClick={() => router.push(`/code/${result.id}`)} className="btn flex-1" style={{ padding: "0.35rem 0.6rem", fontSize: "0.75rem", backgroundColor: "rgba(0,0,0,0.25)", color: "inherit", border: "1px solid rgba(255,255,255,0.25)" }}>
+                  <button type="button" onClick={() => router.push(`/code/${r.id}`)} className="btn flex-1" style={{ padding: "0.35rem 0.6rem", fontSize: "0.75rem", backgroundColor: "rgba(0,0,0,0.25)", color: "inherit", border: "1px solid rgba(255,255,255,0.25)" }}>
                     Open
                   </button>
                 </div>
                 <div className="bubble-meta">
-                  <span>link auto-copied · {formatTTL(result.ttlHours)}</span>
+                  <span>ID auto-copied · {formatTTL(r.ttlHours)}</span>
                   <Check className="h-3.5 w-3.5" />
                 </div>
               </div>
-            )}
+            ))}
           </div>
         </div>
       </div>
 
-      {!done ? (
       <div className="sticky bottom-3 px-4 sm:px-6">
         {draftTotal > 0 && <div className="mb-1 text-xs muted">{formatSize(draftTotal)} / 10MB attached</div>}
         <Composer
@@ -200,25 +250,38 @@ export default function CreatePage() {
           onFiles={onFiles}
           attachIdPrefix="new"
         />
-        {staged && (
-          <div className="mt-2 flex gap-2">
-            <button type="button" onClick={generate} disabled={busy} className="btn btn-primary flex-1" style={{ padding: "0.7rem" }}>
-              {busy ? "Generating…" : "Generate ID + link"}
+        {staged.length > 0 && (
+          <div className="mt-2 flex flex-wrap items-stretch gap-2">
+            <div className="flex min-w-44 flex-1 items-center gap-2 rounded-[10px] px-3" style={{ backgroundColor: "var(--secondary-color)", border: "1px solid var(--border-color)" }} role="group" aria-label="Link validity">
+              <span className="mono shrink-0 text-[11px] muted">1h</span>
+              <input
+                type="range"
+                min={MIN_TTL}
+                max={MAX_TTL}
+                step={1}
+                value={ttlHours}
+                disabled={busy}
+                onChange={(e) => setTtlHours(Number(e.target.value))}
+                className="ttl-slider"
+                aria-label={`Link validity in hours, now ${formatTTL(ttlHours)}`}
+              />
+              <span className="mono shrink-0 text-[11px] muted">7d</span>
+              <span className="chip mono shrink-0" title="ID lives this long">{formatTTL(ttlHours)}</span>
+            </div>
+            <button type="button" onClick={generateAll} disabled={busy} className="btn btn-primary flex-1" style={{ padding: "0.7rem" }}>
+              {busy ? "Generating…" : "Generate ID"}
             </button>
             <button type="button" onClick={fresh} disabled={busy} className="btn btn-ghost">
               Clear
             </button>
           </div>
         )}
+        {results.length > 0 && (
+          <button type="button" onClick={() => setResults([])} disabled={busy} className="btn btn-ghost mt-2 w-full" style={{ padding: "0.5rem", fontSize: "0.75rem" }}>
+            Clear all links ({results.length})
+          </button>
+        )}
       </div>
-      ) : (
-      <div className="px-4 sm:px-6">
-        <button type="button" onClick={fresh} className="btn btn-primary w-full" style={{ padding: "0.8rem" }}>
-          + New paste
-        </button>
-        <p className="mt-2 text-center text-xs muted">Share the ID + link above with any device — open it there, no login.</p>
-      </div>
-      )}
     </div>
   );
 }

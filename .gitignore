@@ -7,6 +7,9 @@
 .env
 .env*.local
 
+# drizzle output
+/drizzle/
+
 # logs
 npm-debug.log*
 

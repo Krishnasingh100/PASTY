@@ -268,6 +268,55 @@ button:focus-visible {
   border-bottom: 1px solid var(--border-color);
 }
 
+/* Mobile drawer: sidebar slides over content below 900px. */
+.drawer {
+  display: contents;
+}
+
+.drawer-backdrop {
+  display: none;
+}
+
+@keyframes drawer-in {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@media (max-width: 899px) {
+  .drawer-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    background-color: rgba(0, 0, 0, 0.55);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+  }
+  .drawer.open .drawer-backdrop {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .drawer .sidebar {
+    display: none;
+  }
+  .drawer.open .sidebar {
+    display: flex;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 60;
+    height: 100dvh;
+    width: min(300px, 86vw);
+    animation: drawer-in 0.18s ease-out;
+  }
+}
+
 .sidebar-search {
   display: flex;
   flex-direction: column;
@@ -701,6 +750,18 @@ button:focus-visible {
 .idbox-copy:hover {
   opacity: 1;
   transform: scale(1.05);
+}
+
+.ttl-slider {
+  flex: 1;
+  min-width: 60px;
+  accent-color: var(--primary-color);
+  cursor: pointer;
+}
+
+.ttl-slider[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 img {

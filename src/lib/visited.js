@@ -30,3 +30,33 @@ export function removeVisited(code) {
     window.localStorage.setItem(KEY, JSON.stringify(list));
   } catch {}
 }
+
+function readSeq(key) {
+  try {
+    return parseInt(window.localStorage.getItem(key) || "0", 10) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+// Numbered names: Paste 1, Paste 2… / Room 1, Room 2…
+// Peek a number for the create request, commit it only on success — no gaps.
+export function peekPasteNum() {
+  return readSeq("pasty-paste-seq") + 1;
+}
+
+export function commitPasteNum(n) {
+  try {
+    if (n > readSeq("pasty-paste-seq")) window.localStorage.setItem("pasty-paste-seq", String(n));
+  } catch {}
+}
+
+export function peekRoomNum() {
+  return readSeq("pasty-room-seq") + 1;
+}
+
+export function commitRoomNum(n) {
+  try {
+    if (n > readSeq("pasty-room-seq")) window.localStorage.setItem("pasty-room-seq", String(n));
+  } catch {}
+}

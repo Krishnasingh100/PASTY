@@ -43,6 +43,8 @@ export const api = {
 
   roomScreenshotUrl: (code, entryId, index) => `/api/rooms/${code}/entries/${entryId}/screenshots/${index}`,
   roomFileUrl: (code, entryId, index) => `/api/rooms/${code}/entries/${entryId}/files/${index}`,
+
+  deleteRoomEntry: (code, entryId) => req(`/rooms/${code}/entries/${entryId}`, { method: "DELETE" }),
 };
 
 export async function downloadUrl(url, filename) {

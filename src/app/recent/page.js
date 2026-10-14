@@ -7,6 +7,7 @@ import { ArrowRight, Clock3, Search, Users } from "lucide-react";
 import { toast } from "react-toastify";
 import api from "@/lib/api.js";
 import { extractId, timeRemaining } from "@/lib/format.js";
+import { peekRoomNum, commitRoomNum } from "@/lib/visited.js";
 
 export default function SearchPage() {
   const router = useRouter();
@@ -24,7 +25,7 @@ export default function SearchPage() {
   const search = async () => {
     const id = extractId(value);
     if (id.length !== 4) {
-      toast.error("Enter a 4-character ID or paste a full link");
+      toast.error("Enter a 4-character ID");
       return;
     }
     setBusy(true);
@@ -49,8 +50,10 @@ export default function SearchPage() {
   const createRoom = async () => {
     if (roomBusy) return;
     setRoomBusy(true);
+    const num = peekRoomNum();
     try {
-      const res = await api.createRoom({ name: "New Room", ttlHours: 24 });
+      const res = await api.createRoom({ name: `Room ${num}`, ttlHours: 24 });
+      commitRoomNum(num);
       router.push(`/room/${res.data.code}`);
     } catch (e) {
       console.error("Create room failed:", e);
@@ -64,7 +67,7 @@ export default function SearchPage() {
     <div className="rise mx-auto w-full max-w-2xl space-y-5">
       <div className="text-center">
         <h1 className="text-xl font-extrabold sm:text-2xl" style={{ color: "var(--foreground)" }}>Open a paste</h1>
-        <p className="text-sm muted">Type the 4-character ID or paste the whole link — both work.</p>
+        <p className="text-sm muted">Type the 4-character ID.</p>
       </div>
 
       <section className="card p-4 sm:p-5">
@@ -73,16 +76,16 @@ export default function SearchPage() {
             value={value}
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && search()}
-            placeholder="a3f9  or  https://your-app/code/a3f9"
+            placeholder="a3f9"
             autoFocus
             className="field mono"
-            aria-label="Paste ID or link"
+            aria-label="Paste ID"
           />
           <button type="button" onClick={search} disabled={busy} className="btn btn-primary sm:w-auto">
             <Search className="h-4 w-4" /> {busy ? "…" : "Open"}
           </button>
         </div>
-        <p className="mt-2 text-xs muted">Links look like <span className="mono">/code/a3f9</span> — the last 4 characters are the ID.</p>
+        <p className="mt-2 text-xs muted">Each paste has a 4-character ID — find it in the box under the paste.</p>
       </section>
 
       <section className="card p-4 sm:p-5">

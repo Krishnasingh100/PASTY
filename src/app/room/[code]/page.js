@@ -31,6 +31,7 @@ export default function RoomPage() {
   const [lightbox, setLightbox] = useState(null);
   const [dragging, setDragging] = useState(false);
   const dragCount = useRef(0);
+  const sendingRef = useRef(false);
   const timer = useRef(null);
   const bottomRef = useRef(null);
 
@@ -60,6 +61,12 @@ export default function RoomPage() {
   }, [code, load]);
 
   const onFiles = (incoming) => {
+    // UploadZone remove buttons send back { screenshots, files } directly.
+    if (incoming && Array.isArray(incoming.screenshots) && Array.isArray(incoming.files)) {
+      setScreenshots(incoming.screenshots);
+      setFiles(incoming.files);
+      return;
+    }
     const cap = room ? Math.min(10 * 1024 * 1024, Math.max(0, room.maxSize - room.totalSize)) : 10 * 1024 * 1024;
     const next = addIncoming(screenshots, files, incoming, { maxTotal: cap });
     setScreenshots(next.screenshots);
@@ -67,10 +74,12 @@ export default function RoomPage() {
   };
 
   const send = async () => {
+    if (sendingRef.current) return;
     if (!entryCode.trim() && screenshots.length === 0 && files.length === 0) {
       toast.error("Type something or attach a file first");
       return;
     }
+    sendingRef.current = true;
     const formatted = await tryFormat(entryCode);
     if (formatted !== entryCode) setEntryCode(formatted);
     const autoTitle = deriveTitle(formatted, screenshots, files);
@@ -102,6 +111,7 @@ export default function RoomPage() {
       setRoom((prev) => (prev ? { ...prev, entries: prev.entries.filter((x) => x.id !== tempId) } : prev));
     } finally {
       setAdding(false);
+      sendingRef.current = false;
     }
   };
 

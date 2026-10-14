@@ -1,11 +1,17 @@
 "use client";
 
+import { useEffect, useMemo } from "react";
 import { Paperclip, X } from "lucide-react";
 import { formatSize } from "@/lib/format.js";
 
 // Attachment tray: previews selected screenshots + file rows with remove.
 // Picking happens in Composer attach menu; validation in lib/attach.js.
 export default function UploadZone({ screenshots, files, onChange }) {
+  const urls = useMemo(() => screenshots.map((f) => URL.createObjectURL(f)), [screenshots]);
+  useEffect(() => () => {
+    urls.forEach((u) => URL.revokeObjectURL(u));
+  }, [urls]);
+
   return (
     <div>
       {screenshots.length > 0 && (
@@ -13,7 +19,7 @@ export default function UploadZone({ screenshots, files, onChange }) {
           {screenshots.map((f, i) => (
             <div key={i} className="group relative overflow-hidden rounded-md" style={{ width: 88, height: 88, border: "1px solid var(--border-color)" }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={URL.createObjectURL(f)} alt={f.name} className="h-full w-full object-cover" />
+              <img src={urls[i]} alt={f.name} className="h-full w-full object-cover" />
               <button
                 type="button"
                 onClick={() => onChange({ screenshots: screenshots.filter((_, j) => j !== i), files })}

@@ -7,11 +7,11 @@ import { ClipboardPaste, Hash, MessageSquarePlus, Search, Trash2, Users } from "
 import { toast } from "react-toastify";
 import api from "@/lib/api.js";
 import { copyText, extractId, timeRemaining } from "@/lib/format.js";
-import { getVisited, pingLists, removeVisited } from "@/lib/visited.js";
+import { getVisited, pingLists, removeVisited, peekRoomNum, commitRoomNum } from "@/lib/visited.js";
 import IdBox from "./IdBox.jsx";
 import ThemeToggle from "./ThemeToggle.jsx";
 
-export default function Sidebar() {
+export default function Sidebar({ onNavigate }) {
   const router = useRouter();
   const [q, setQ] = useState("");
   const [joinCode, setJoinCode] = useState("");
@@ -36,8 +36,9 @@ export default function Sidebar() {
 
   const go = () => {
     const id = extractId(q);
-    if (id.length !== 4) return toast.error("Enter a 4-character ID or paste link");
+    if (id.length !== 4) return toast.error("Enter a 4-character ID");
     setQ("");
+    onNavigate?.();
     router.push(`/code/${id}`);
   };
 
@@ -45,14 +46,18 @@ export default function Sidebar() {
     const code = joinCode.trim().toLowerCase();
     if (code.length !== 6) return toast.error("Enter a 6-character room code");
     setJoinCode("");
+    onNavigate?.();
     router.push(`/room/${code}`);
   };
 
   const createRoom = async () => {
     if (roomBusy) return;
     setRoomBusy(true);
+    const num = peekRoomNum();
     try {
-      const res = await api.createRoom({ name: "New Room", ttlHours: 24 });
+      const res = await api.createRoom({ name: `Room ${num}`, ttlHours: 24 });
+      commitRoomNum(num);
+      onNavigate?.();
       router.push(`/room/${res.data.code}`);
     } catch (e) {
       console.error("Create room failed:", e);
@@ -72,7 +77,10 @@ export default function Sidebar() {
       if (expandedId === id) setExpandedId(null);
       pingLists();
       toast.success("Paste deleted");
-      if (typeof window !== "undefined" && window.location.pathname === `/code/${id}`) router.push("/");
+      if (typeof window !== "undefined" && window.location.pathname === `/code/${id}`) {
+        onNavigate?.();
+        router.push("/");
+      }
     } catch (e) {
       console.error("Delete paste failed:", e);
       toast.error(e?.message || "Could not delete paste");
@@ -96,7 +104,10 @@ export default function Sidebar() {
       setRooms(getVisited());
       pingLists();
       toast.success("Room deleted");
-      if (typeof window !== "undefined" && window.location.pathname === `/room/${code}`) router.push("/");
+      if (typeof window !== "undefined" && window.location.pathname === `/room/${code}`) {
+        onNavigate?.();
+        router.push("/");
+      }
     } finally {
       setDeleting(null);
     }
@@ -105,14 +116,14 @@ export default function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="sidebar-head">
-        <Link href="/" className="flex items-center gap-2" style={{ textDecoration: "none" }}>
+        <Link href="/" onClick={onNavigate} className="flex items-center gap-2" style={{ textDecoration: "none" }}>
           <span className="flex h-9 w-9 items-center justify-center rounded-full" style={{ backgroundColor: "var(--primary-color)", color: "var(--primary-ink)" }}>
             <ClipboardPaste className="h-4 w-4" />
           </span>
           <span className="text-base font-extrabold tracking-[0.2em]" style={{ color: "var(--foreground)" }}>PASTY</span>
         </Link>
         <div className="ms-auto flex items-center gap-1">
-          <Link href="/" className="icon-btn" title="New paste" aria-label="New paste">
+          <Link href="/" onClick={onNavigate} className="icon-btn" title="New paste" aria-label="New paste">
             <MessageSquarePlus className="h-5 w-5" />
           </Link>
           <ThemeToggle />
@@ -126,7 +137,7 @@ export default function Sidebar() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && go()}
-            placeholder="Paste ID or link…"
+            placeholder="Paste ID…"
             className="mono min-w-0 flex-1"
             aria-label="Find paste"
           />
@@ -156,7 +167,6 @@ export default function Sidebar() {
         {pastes.length === 0 && <div className="sidebar-empty">Nothing yet.</div>}
         {pastes.map((g) => {
           const open = expandedId === g.id;
-          const link = typeof window !== "undefined" ? `${window.location.origin}/code/${g.id}` : `/code/${g.id}`;
           return (
             <div key={g.id} className="side-item-col">
               <div className="flex items-center gap-1">
@@ -183,12 +193,11 @@ export default function Sidebar() {
               {open && (
                 <div className="rise mb-1 ml-12 mr-1 space-y-2 rounded-lg p-2.5" style={{ backgroundColor: "var(--input-bg)", border: "1px solid var(--border-color)" }}>
                   <IdBox label="Paste ID" value={g.id} toastMsg="ID copied!" />
-                  <IdBox label="Paste link" value={link} toastMsg="Link copied!" />
                   <div className="flex gap-1.5">
-                    <button type="button" onClick={() => copyText(link)} className="btn btn-ghost flex-1" style={{ padding: "0.3rem 0.6rem", fontSize: "0.7rem" }}>
-                      Copy link
+                    <button type="button" onClick={() => copyText(g.id, "ID copied!")} className="btn btn-ghost flex-1" style={{ padding: "0.3rem 0.6rem", fontSize: "0.7rem" }}>
+                      Copy ID
                     </button>
-                    <button type="button" onClick={() => router.push(`/code/${g.id}`)} className="btn btn-primary flex-1" style={{ padding: "0.3rem 0.6rem", fontSize: "0.7rem" }}>
+                    <button type="button" onClick={() => { onNavigate?.(); router.push(`/code/${g.id}`); }} className="btn btn-primary flex-1" style={{ padding: "0.3rem 0.6rem", fontSize: "0.7rem" }}>
                       Open
                     </button>
                   </div>
@@ -211,7 +220,7 @@ export default function Sidebar() {
         {rooms.length === 0 && <div className="sidebar-empty">No recent rooms.</div>}
         {rooms.map((r) => (
           <div key={r.code} className="flex items-center gap-1">
-            <Link href={`/room/${r.code}`} className="side-item min-w-0 flex-1">
+            <Link href={`/room/${r.code}`} onClick={onNavigate} className="side-item min-w-0 flex-1">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold" style={{ backgroundColor: "var(--secondary-hover)", color: "var(--primary-color)" }}>
                 {(r.name || "R").slice(0, 1).toUpperCase()}
               </span>

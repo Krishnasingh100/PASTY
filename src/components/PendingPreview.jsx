@@ -11,7 +11,6 @@ export default function PendingPreview({ code = "", screenshots = [], files = []
 
   return (
     <div className="bubble bubble-out rise" style={{ maxWidth: "100%", opacity: 0.95 }}>
-      <div className="bubble-name" style={{ color: "inherit", opacity: 0.75 }}>Preview — not sent yet</div>
       {hasCode && (
         <div className="mt-1">
           <CodeBlock code={code} langLabel="preview" />
@@ -22,7 +21,6 @@ export default function PendingPreview({ code = "", screenshots = [], files = []
           {[...screenshots, ...files].map((f) => f.name).join(", ")} · {formatSize(total)}
         </div>
       )}
-      <div className="bubble-meta"><span>preview</span></div>
     </div>
   );
 }

@@ -2,6 +2,10 @@ import { inArray, lte } from "drizzle-orm";
 import { getDb } from "@/lib/db.js";
 import { gistAttachments, gists, roomAttachments, roomEntries, rooms } from "@/db/schema.js";
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
 // Vercel Cron hits this daily. Deletes expired rows.
 // FK cascades clear attachments, but we delete attachments first to free space fast.
 export async function GET(req) {

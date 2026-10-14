@@ -6,7 +6,7 @@ import Link from "next/link";
 import { AlertTriangle, Plus } from "lucide-react";
 import { toast } from "react-toastify";
 import api, { downloadUrl } from "@/lib/api.js";
-import { copyText, formatSize, formatTTL, timeRemaining } from "@/lib/format.js";
+import { formatSize, formatTTL, timeRemaining } from "@/lib/format.js";
 import CodeBlock from "@/components/CodeBlock.jsx";
 import FileBubble from "@/components/FileBubble.jsx";
 import IdBox from "@/components/IdBox.jsx";
@@ -96,22 +96,6 @@ export default function ViewPage() {
             <div className="bubble-meta"><span>{time(gist.createdAt)}</span></div>
           </div>
         ))}
-
-        <div className="bubble bubble-out">
-          <div className="text-sm">Share this chat:</div>
-          <div className="mt-1">
-            <IdBox label="Share link" value={typeof window !== "undefined" ? window.location.href : `/code/${gist.id}`} toastMsg="Link copied!" />
-          </div>
-          <div className="mt-2 flex gap-1.5">
-            <button type="button" onClick={() => copyText(gist.code || "", "Code copied!")} className="btn flex-1" style={{ padding: "0.35rem 0.6rem", fontSize: "0.75rem", backgroundColor: "rgba(0,0,0,0.25)", color: "inherit", border: "1px solid rgba(255,255,255,0.25)" }}>
-              Copy code
-            </button>
-            <button type="button" onClick={() => copyText(window.location.href, "Link copied!")} className="btn flex-1" style={{ padding: "0.35rem 0.6rem", fontSize: "0.75rem", backgroundColor: "rgba(0,0,0,0.25)", color: "inherit", border: "1px solid rgba(255,255,255,0.25)" }}>
-              Copy link
-            </button>
-          </div>
-          <div className="bubble-meta"><span>{time(gist.createdAt)}</span></div>
-        </div>
       </div>
 
       {lightbox !== null && gist.screenshots[lightbox] && (
