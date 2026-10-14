@@ -1,16 +1,19 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import hljs from "highlight.js/lib/common";
 import { Check, Copy } from "lucide-react";
 import { copyText } from "@/lib/format.js";
 
-export default function CodeBlock({ code, langLabel = "code" }) {
+// Small grammar subset. Old code scanned every bundled language per render.
+const LANGS = ["javascript", "typescript", "python", "java", "cpp", "csharp", "go", "rust", "ruby", "php", "html", "css", "json", "bash", "sql", "plaintext"];
+
+function CodeBlock({ code, langLabel = "code" }) {
   const [copied, setCopied] = useState(false);
 
   const { html, lang } = useMemo(() => {
     try {
-      const auto = hljs.highlightAuto(code || "", hljs.listLanguages());
+      const auto = hljs.highlightAuto(code || "", LANGS);
       return { html: auto.value, lang: auto.language || langLabel };
     } catch {
       return { html: null, lang: langLabel };
@@ -43,3 +46,5 @@ export default function CodeBlock({ code, langLabel = "code" }) {
     </div>
   );
 }
+
+export default memo(CodeBlock);

@@ -7,8 +7,9 @@ import { ClipboardPaste, Hash, MessageSquarePlus, Search, Trash2, Users } from "
 import { toast } from "react-toastify";
 import api from "@/lib/api.js";
 import { copyText, extractId, timeRemaining } from "@/lib/format.js";
-import { getVisited, pingLists, removeVisited, peekRoomNum, commitRoomNum } from "@/lib/visited.js";
+import { getVisited, pingLists, removeVisited, peekRoomNum, commitRoomNum, getPastes, removePaste } from "@/lib/visited.js";
 import IdBox from "./IdBox.jsx";
+import ConfirmDialog from "./ConfirmDialog.jsx";
 import ThemeToggle from "./ThemeToggle.jsx";
 
 export default function Sidebar({ onNavigate }) {
@@ -20,12 +21,31 @@ export default function Sidebar({ onNavigate }) {
   const [pastes, setPastes] = useState([]);
   const [rooms, setRooms] = useState([]);
   const [deleting, setDeleting] = useState(null);
+  const [confirm, setConfirm] = useState(null);
 
   useEffect(() => {
     let live = true;
+    let last = 0;
     const reload = () => {
       if (!live) return;
-      api.listGists(1, 8).then((r) => live && setPastes(r.data || [])).catch(() => {});
+      // Focus storms refetch every time. 15s throttle.
+      const now = Date.now();
+      if (now - last < 15000) {
+        setRooms(getVisited());
+        return;
+      }
+      last = now;
+      // Pastes shown = only IDs created on THIS device. Server list is only
+      // used to enrich own rows with expiry. Visitors see empty history.
+      const own = getPastes();
+      setPastes(own);
+      if (own.length > 0) {
+        api.listGists(1, 30).then((r) => {
+          if (!live) return;
+          const meta = new Map((r.data || []).map((g) => [g.id, g]));
+          setPastes(getPastes().map((p) => ({ ...p, ...(meta.get(p.id) || {}) })));
+        }).catch(() => {});
+      }
       setRooms(getVisited());
     };
     reload();
@@ -69,10 +89,10 @@ export default function Sidebar({ onNavigate }) {
 
   const deletePaste = async (id) => {
     if (deleting) return;
-    if (!window.confirm(`Delete paste ${id}? Gone forever.`)) return;
     setDeleting(`paste:${id}`);
     try {
       await api.deleteGist(id);
+      removePaste(id);
       setPastes((prev) => prev.filter((g) => g.id !== id));
       if (expandedId === id) setExpandedId(null);
       pingLists();
@@ -89,9 +109,21 @@ export default function Sidebar({ onNavigate }) {
     }
   };
 
+  const runConfirm = () => {
+    if (!confirm || deleting) return;
+    if (confirm.kind === "paste") {
+      const id = confirm.id;
+      setConfirm(null);
+      deletePaste(id);
+    } else {
+      const code = confirm.code;
+      setConfirm(null);
+      deleteRoom(code);
+    }
+  };
+
   const deleteRoom = async (code) => {
     if (deleting) return;
-    if (!window.confirm(`Delete room ${code}? All messages gone forever.`)) return;
     setDeleting(`room:${code}`);
     try {
       try {
@@ -181,7 +213,7 @@ export default function Sidebar({ onNavigate }) {
                 </button>
                 <button
                   type="button"
-                  onClick={() => deletePaste(g.id)}
+                  onClick={() => setConfirm({ kind: "paste", id: g.id })}
                   disabled={deleting === `paste:${g.id}`}
                   className="icon-btn shrink-0"
                   aria-label={`Delete paste ${g.id}`}
@@ -203,7 +235,7 @@ export default function Sidebar({ onNavigate }) {
                   </div>
                   <button
                     type="button"
-                    onClick={() => deletePaste(g.id)}
+                    onClick={() => setConfirm({ kind: "paste", id: g.id })}
                     disabled={deleting === `paste:${g.id}`}
                     className="btn btn-ghost w-full"
                     style={{ padding: "0.3rem 0.6rem", fontSize: "0.7rem", color: "var(--danger-color)" }}
@@ -231,7 +263,7 @@ export default function Sidebar({ onNavigate }) {
             </Link>
             <button
               type="button"
-              onClick={() => deleteRoom(r.code)}
+              onClick={() => setConfirm({ kind: "room", code: r.code })}
               disabled={deleting === `room:${r.code}`}
               className="icon-btn shrink-0"
               aria-label={`Delete room ${r.code}`}
@@ -242,6 +274,15 @@ export default function Sidebar({ onNavigate }) {
           </div>
         ))}
       </div>
+      <ConfirmDialog
+        open={!!confirm}
+        title={confirm?.kind === "room" ? `Delete room ${confirm.code}?` : `Delete paste ${confirm?.id}?`}
+        message={confirm?.kind === "room" ? "All messages gone forever." : "Gone forever."}
+        confirmLabel="Delete"
+        busy={!!deleting}
+        onCancel={() => setConfirm(null)}
+        onConfirm={runConfirm}
+      />
     </aside>
   );
 }

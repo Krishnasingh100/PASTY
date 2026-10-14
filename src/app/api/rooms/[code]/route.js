@@ -5,22 +5,44 @@ import { roomAttachments, roomEntries, rooms } from "@/db/schema.js";
 
 export { MAX_ROOM_SIZE };
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 export async function GET(req, { params }) {
   try {
     const { code } = await params;
     if (!code || code.length !== 6) {
       return Response.json({ success: false, message: "Invalid room code" }, { status: 400 });
     }
+    const key = code.toLowerCase();
+    const { searchParams } = new URL(req.url);
+    const limit = Math.min(Math.max(parseInt(searchParams.get("limit") || "100", 10) || 100, 1), 200);
+    const sinceId = parseInt(searchParams.get("sinceId") || "0", 10) || 0;
+    const knownTotal = searchParams.get("totalSize");
     const db = getDb();
     const now = new Date();
-    const roomRows = await db
-      .select()
-      .from(rooms)
-      .where(and(eq(rooms.code, code.toLowerCase()), gt(rooms.expiresAt, now)));
+    // Room meta + newest entry id in parallel. One RTT, both indexed.
+    const [roomRows, headRows] = await Promise.all([
+      db
+        .select()
+        .from(rooms)
+        .where(and(eq(rooms.code, key), gt(rooms.expiresAt, now))),
+      db
+        .select({ id: roomEntries.id })
+        .from(roomEntries)
+        .where(eq(roomEntries.roomCode, key))
+        .orderBy(desc(roomEntries.id))
+        .limit(1),
+    ]);
     if (roomRows.length === 0) {
       return Response.json({ success: false, message: "Room not found or expired" }, { status: 404 });
     }
     const room = roomRows[0];
+    const topId = headRows[0]?.id || 0;
+    // Cheap-poll fast path: nothing new, skip entries + attachments entirely.
+    if (sinceId > 0 && sinceId === topId && knownTotal != null && Number(knownTotal) === room.totalSize) {
+      return Response.json({ success: true, unchanged: true, data: { code: room.code, totalSize: room.totalSize, topId } });
+    }
     const entries = await db
       .select({
         id: roomEntries.id,
@@ -31,7 +53,8 @@ export async function GET(req, { params }) {
       })
       .from(roomEntries)
       .where(and(eq(roomEntries.roomCode, room.code), gt(roomEntries.expiresAt, now)))
-      .orderBy(desc(roomEntries.createdAt));
+      .orderBy(desc(roomEntries.createdAt))
+      .limit(limit);
 
     let atts = [];
     const entryIds = entries.map((e) => e.id);
@@ -43,23 +66,31 @@ export async function GET(req, { params }) {
         .orderBy(asc(roomAttachments.id));
     }
 
+    // Single pass group by entry. Old code ran filter per entry: O(n*m).
+    const byEntry = new Map();
+    for (const a of atts) {
+      let g = byEntry.get(a.entryId);
+      if (!g) {
+        g = { shots: [], files: [] };
+        byEntry.set(a.entryId, g);
+      }
+      (a.kind === "screenshot" ? g.shots : g.files).push(a);
+    }
     const entriesData = entries.map((entry) => {
-      const mine = atts.filter((a) => a.entryId === entry.id);
-      const shots = mine.filter((a) => a.kind === "screenshot");
-      const files = mine.filter((a) => a.kind === "file");
+      const g = byEntry.get(entry.id) || { shots: [], files: [] };
       return {
         id: entry.id,
         title: entry.title,
         code: entry.code,
         entrySize: entry.entrySize,
-        screenshots: shots.map((s, i) => ({
+        screenshots: g.shots.map((s, i) => ({
           index: i,
           name: s.name,
           size: s.size,
           contentType: s.mime,
           url: `/api/rooms/${room.code}/entries/${entry.id}/screenshots/${i}`,
         })),
-        files: files.map((f, i) => ({
+        files: g.files.map((f, i) => ({
           index: i,
           name: f.name,
           size: f.size,
@@ -78,6 +109,7 @@ export async function GET(req, { params }) {
         ttlHours: room.ttlHours,
         totalSize: room.totalSize,
         maxSize: MAX_ROOM_SIZE,
+        topId,
         entries: entriesData,
         createdAt: room.createdAt,
         expiresAt: room.expiresAt,

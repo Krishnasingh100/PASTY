@@ -18,7 +18,7 @@ export const api = {
     return req("/gists", { method: "POST", body: form });
   },
 
-  getGist: (id) => req(`/gists/${id}`),
+  getGist: (id) => req(`/gists/${id}`, { cache: "no-store" }),
   deleteGist: (id) => req(`/gists/${id}`, { method: "DELETE" }),
   searchGist: (id) => req(`/gists/search/${id}`),
   listGists: (page = 1, limit = 20) => req(`/gists?page=${page}&limit=${limit}`),
@@ -29,7 +29,10 @@ export const api = {
   createRoom: (roomData) =>
     req("/rooms", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(roomData) }),
 
-  getRoom: (code) => req(`/rooms/${code}`),
+  getRoom: (code, params) => {
+    const q = params ? `?${new URLSearchParams(params).toString()}` : "";
+    return req(`/rooms/${code}${q}`, { cache: "no-store" });
+  },
   deleteRoom: (code) => req(`/rooms/${code}`, { method: "DELETE" }),
 
   addRoomEntry: async (code, entryData, screenshots = [], files = []) => {

@@ -1,3 +1,5 @@
+import { toast } from "react-toastify";
+
 export function formatTTL(hours) {
   if (!hours) return "";
   if (hours < 24) return `${hours}h`;
@@ -40,7 +42,6 @@ export function deriveTitle(code = "", screenshots = [], files = []) {
 }
 
 export async function copyText(text, successMsg) {
-  const { toast } = await import("react-toastify");
   try {
     await navigator.clipboard.writeText(text);
     if (successMsg) toast.success(successMsg);

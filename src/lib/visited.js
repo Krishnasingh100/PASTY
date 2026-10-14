@@ -31,6 +31,33 @@ export function removeVisited(code) {
   } catch {}
 }
 
+// Own pastes, per device. Sidebar + recent show only these — a visitor who
+// opens your shared link never sees your history.
+const PKEY = "pasty-pastes";
+
+export function getPastes() {
+  try {
+    const list = JSON.parse(window.localStorage.getItem(PKEY) || "[]");
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+
+export function addPaste(id, title) {
+  try {
+    const list = getPastes().filter((p) => p.id !== id);
+    list.unshift({ id, title: title || "Untitled", at: Date.now() });
+    window.localStorage.setItem(PKEY, JSON.stringify(list.slice(0, 30)));
+  } catch {}
+}
+
+export function removePaste(id) {
+  try {
+    window.localStorage.setItem(PKEY, JSON.stringify(getPastes().filter((p) => p.id !== id)));
+  } catch {}
+}
+
 function readSeq(key) {
   try {
     return parseInt(window.localStorage.getItem(key) || "0", 10) || 0;

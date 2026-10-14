@@ -516,6 +516,13 @@ button:focus-visible {
   box-shadow: var(--shadow);
 }
 
+/* Touch devices (mobile + tablet): no room for hint text, hide it. */
+@media (pointer: coarse) {
+  .composer-box::placeholder {
+    color: transparent;
+  }
+}
+
 .composer-row {
   display: flex;
   align-items: flex-end;

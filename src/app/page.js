@@ -8,7 +8,7 @@ import api from "@/lib/api.js";
 import { addIncoming } from "@/lib/attach.js";
 import { copyText, formatSize, formatTTL } from "@/lib/format.js";
 import { tryFormat } from "@/lib/formatCode.js";
-import { pingLists, peekPasteNum, commitPasteNum } from "@/lib/visited.js";
+import { pingLists, peekPasteNum, commitPasteNum, addPaste } from "@/lib/visited.js";
 import Composer from "@/components/Composer.jsx";
 import PendingPreview from "@/components/PendingPreview.jsx";
 import IdBox from "@/components/IdBox.jsx";
@@ -116,6 +116,7 @@ export default function CreatePage() {
       );
       if (!res?.data?.id) throw new Error("Server returned no ID — try again");
       commitPasteNum(num);
+      addPaste(res.data.id, res.data.title);
       setResults((prev) => [...prev, { id: res.data.id, ttlHours: res.data.ttlHours, title: res.data.title }]);
       setStaged([]);
       pingLists();

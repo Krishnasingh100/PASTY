@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { AlertTriangle, ArrowLeft, Check, Plus } from "lucide-react";
@@ -16,7 +16,7 @@ import Composer from "@/components/Composer.jsx";
 import IdBox from "@/components/IdBox.jsx";
 import Lightbox from "@/components/Lightbox.jsx";
 
-const POLL_MS = 10000;
+const POLL_MS = 3000;
 const time = (d) => new Date(d).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 const day = (d) => new Date(d).toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" });
 
@@ -32,14 +32,22 @@ export default function RoomPage() {
   const [dragging, setDragging] = useState(false);
   const dragCount = useRef(0);
   const sendingRef = useRef(false);
+  const pollBusy = useRef(false);
+  const cursor = useRef({ topId: 0, totalSize: -1 });
   const timer = useRef(null);
   const bottomRef = useRef(null);
 
   const load = useCallback(async (silent = false) => {
-    if (!code) return;
+    if (!code || pollBusy.current) return;
+    pollBusy.current = true;
     try {
-      const res = await api.getRoom(code);
+      // Silent ticks send cursor. Server answers { unchanged:true } with 2 cheap
+      // indexed queries, no payload, no re-render.
+      const c = cursor.current;
+      const res = await api.getRoom(code, silent && c.topId > 0 ? { sinceId: c.topId, totalSize: c.totalSize } : undefined);
+      if (res?.unchanged) return;
       if (!res?.data?.code) throw new Error("Bad room response");
+      cursor.current = { topId: res.data.topId || 0, totalSize: res.data.totalSize };
       setRoom(res.data);
       setError("");
       addVisited(res.data.code, res.data.name);
@@ -47,12 +55,15 @@ export default function RoomPage() {
     } catch (e) {
       console.error("Load room failed:", e);
       if (!silent) setError(e?.message || "Failed to load room");
+    } finally {
+      pollBusy.current = false;
     }
   }, [code]);
 
   useEffect(() => {
     setRoom(null);
     setError("");
+    cursor.current = { topId: 0, totalSize: -1 };
     load();
     timer.current = setInterval(() => { if (!document.hidden) load(true); }, POLL_MS);
     const onFocus = () => load(true);
@@ -192,54 +203,9 @@ export default function RoomPage() {
           </div>
         )}
 
-        {room.entries.map((entry) => {
-          const own = entry._sending || isOwn(entry.id);
-          return (
-            <div key={entry.id} className={`bubble ${own ? "bubble-out" : "bubble-in"}`} style={entry._sending ? { opacity: 0.75 } : undefined}>
-              {/* Title is auto-derived from the first code line — show it only when there is no code text, else text shows twice. */}
-              {!entry.code && entry.title && (
-                <div className="bubble-name" style={own ? { color: "inherit", opacity: 0.8 } : undefined}>{entry.title}</div>
-              )}
-              {entry.code && (
-                <div className="mt-1"><CodeBlock code={entry.code} /></div>
-              )}
-              {!entry._sending && entry.screenshots?.map((s, i) => (
-                <div key={`s-${i}`} className="mt-1.5">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={api.roomScreenshotUrl(room.code, entry.id, i)}
-                    alt={s.name}
-                    loading="lazy"
-                    onClick={() => setLightbox({ entryId: entry.id, index: i, name: s.name })}
-                    className="w-full cursor-pointer rounded-lg object-cover"
-                    style={{ maxHeight: 320 }}
-                  />
-                </div>
-              ))}
-              {!entry._sending && entry.files?.map((f, i) => (
-                <div key={`f-${i}`} className="mt-1.5">
-                  <FileBubble url={api.roomFileUrl(room.code, entry.id, i)} name={f.name} size={f.size} mime={f.contentType} variant="soft" />
-                </div>
-              ))}
-              {entry._sending && (entry.screenshots.length > 0 || entry.files.length > 0) && (
-                <div className="mt-1.5 text-xs" style={{ opacity: 0.8 }}>
-                  Uploading: {[...entry.screenshots, ...entry.files].map((f) => f.name).join(", ")}
-                </div>
-              )}
-              <div className="bubble-meta">
-                {entry._sending ? (
-                  <span>Sending…</span>
-                ) : (
-                  <>
-                    {entry.entrySize > 0 && <span>{formatSize(entry.entrySize)}</span>}
-                    <span>{time(entry.createdAt)}</span>
-                    {own && <Check className="h-3.5 w-3.5" />}
-                  </>
-                )}
-              </div>
-            </div>
-          );
-        })}
+        {room.entries.map((entry) => (
+          <RoomEntry key={entry.id} entry={entry} roomCode={room.code} onLightbox={setLightbox} />
+        ))}
         <div ref={bottomRef} />
       </div>
 
@@ -262,7 +228,7 @@ export default function RoomPage() {
         attachIdPrefix="room"
       />
 
-      <p className="text-center text-xs muted">Created {new Date(room.createdAt).toLocaleString()} · auto-refresh 10s</p>
+      <p className="text-center text-xs muted">Created {new Date(room.createdAt).toLocaleString()} · auto-refresh 3s</p>
 
       {lightbox && (
         <Lightbox
@@ -278,3 +244,55 @@ export default function RoomPage() {
     </div>
   );
 }
+
+// Memo entry: same object ref skips render. Typing in composer no longer
+// re-renders the whole chat thread every keystroke.
+const RoomEntry = memo(function RoomEntry({ entry, roomCode, onLightbox }) {
+  const own = entry._sending || isOwn(entry.id);
+  return (
+    <div className={`bubble ${own ? "bubble-out" : "bubble-in"}`} style={entry._sending ? { opacity: 0.75 } : undefined}>
+      {/* Title is auto-derived from the first code line — show it only when there is no code text, else text shows twice. */}
+      {!entry.code && entry.title && (
+        <div className="bubble-name" style={own ? { color: "inherit", opacity: 0.8 } : undefined}>{entry.title}</div>
+      )}
+      {entry.code && (
+        <div className="mt-1"><CodeBlock code={entry.code} /></div>
+      )}
+      {!entry._sending && entry.screenshots?.map((s, i) => (
+        <div key={`s-${i}`} className="mt-1.5">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={api.roomScreenshotUrl(roomCode, entry.id, i)}
+            alt={s.name}
+            loading="lazy"
+            decoding="async"
+            onClick={() => onLightbox({ entryId: entry.id, index: i, name: s.name })}
+            className="w-full cursor-pointer rounded-lg object-cover"
+            style={{ maxHeight: 320 }}
+          />
+        </div>
+      ))}
+      {!entry._sending && entry.files?.map((f, i) => (
+        <div key={`f-${i}`} className="mt-1.5">
+          <FileBubble url={api.roomFileUrl(roomCode, entry.id, i)} name={f.name} size={f.size} mime={f.contentType} variant="soft" />
+        </div>
+      ))}
+      {entry._sending && (entry.screenshots.length > 0 || entry.files.length > 0) && (
+        <div className="mt-1.5 text-xs" style={{ opacity: 0.8 }}>
+          Uploading: {[...entry.screenshots, ...entry.files].map((f) => f.name).join(", ")}
+        </div>
+      )}
+      <div className="bubble-meta">
+        {entry._sending ? (
+          <span>Sending…</span>
+        ) : (
+          <>
+            {entry.entrySize > 0 && <span>{formatSize(entry.entrySize)}</span>}
+            <span>{time(entry.createdAt)}</span>
+            {own && <Check className="h-3.5 w-3.5" />}
+          </>
+        )}
+      </div>
+    </div>
+  );
+});
