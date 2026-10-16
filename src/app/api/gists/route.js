@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, sql } from "drizzle-orm";
+import { desc, gt, sql } from "drizzle-orm";
 import { getDb } from "@/lib/db.js";
 import { gistAttachments, gists } from "@/db/schema.js";
 import { generateUniqueGistId } from "@/lib/ids.js";
@@ -23,14 +23,17 @@ export async function POST(req) {
     const expiresAt = new Date(now.getTime() + ttlHours * 60 * 60 * 1000);
     const fileName = (formData.get("fileName") || "untitled.txt").toString().slice(0, 50);
 
-    await db.insert(gists).values({
-      id,
-      code: codeContent,
-      title: title.trim().slice(0, 100) || "Untitled",
-      fileName,
-      ttlHours,
-      expiresAt,
-    });
+    const inserted = await db
+      .insert(gists)
+      .values({
+        id,
+        code: codeContent,
+        title: title.trim().slice(0, 100) || "Untitled",
+        fileName,
+        ttlHours,
+        expiresAt,
+      })
+      .returning();
 
     const rows = [
       ...screenshots.map((f) => ({
@@ -52,20 +55,20 @@ export async function POST(req) {
     ];
     if (rows.length > 0) await db.insert(gistAttachments).values(rows);
 
-    const saved = await db.select().from(gists).where(eq(gists.id, id));
+    const saved = inserted[0];
 
     return Response.json(
       {
         success: true,
         data: {
           id,
-          title: saved[0]?.title,
-          fileName: saved[0]?.fileName,
+          title: saved?.title,
+          fileName: saved?.fileName,
           ttlHours,
           screenshotCount: screenshots.length,
           fileCount: files.length,
-          createdAt: saved[0]?.createdAt,
-          expiresAt: saved[0]?.expiresAt,
+          createdAt: saved?.createdAt,
+          expiresAt: saved?.expiresAt,
         },
         message: "Code snippet created successfully",
       },

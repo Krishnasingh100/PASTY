@@ -8,7 +8,7 @@ export default function Toasts() {
     <ToastContainer
       position="top-right"
       autoClose={2500}
-      hideProgressBar={false}
+      hideProgressBar
       closeOnClick
       pauseOnHover
       theme="dark"

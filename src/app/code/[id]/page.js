@@ -82,6 +82,7 @@ export default function ViewPage() {
               src={api.gistScreenshotUrl(gist.id, i)}
               alt={s.name}
               loading="lazy"
+              decoding="async"
               onClick={() => setLightbox(i)}
               className="w-full cursor-pointer rounded-lg object-cover"
               style={{ maxHeight: 380 }}

@@ -178,7 +178,7 @@ button:focus-visible {
   color: var(--muted-foreground);
 }
 
-/* WhatsApp-style shell: sidebar + thread pane */
+/* App shell: sidebar + thread pane */
 .shell {
   display: flex;
   align-items: stretch;

@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { FileUp, ImagePlus, Plus, X } from "lucide-react";
 import UploadZone from "@/components/UploadZone.jsx";
 
-// WhatsApp-style composer: + attach menu, growing box, send button.
+// Chat composer: + attach menu, growing box, send button.
 export default function Composer({
   value,
   onChange,
@@ -169,7 +169,7 @@ function PhotoTray({ screenshots, files, onFiles }) {
   if (screenshots.length === 0 && files.length === 0) return null;
   return (
     <div className="mt-2">
-      <UploadZone screenshots={screenshots} files={files} onChange={onFiles} compact hideDrop />
+      <UploadZone screenshots={screenshots} files={files} onChange={onFiles} />
     </div>
   );
 }

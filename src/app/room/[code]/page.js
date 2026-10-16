@@ -8,7 +8,7 @@ import { toast } from "react-toastify";
 import api, { downloadUrl } from "@/lib/api.js";
 import { addIncoming } from "@/lib/attach.js";
 import { isOwn, markOwn } from "@/lib/device.js";
-import { deriveTitle, formatSize, formatTTL, timeRemaining } from "@/lib/format.js";
+import { deriveTitle, formatSize, timeRemaining } from "@/lib/format.js";
 import { tryFormat } from "@/lib/formatCode.js";
 import { addVisited, pingLists } from "@/lib/visited.js";
 import CodeBlock from "@/components/CodeBlock.jsx";

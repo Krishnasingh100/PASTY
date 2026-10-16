@@ -1,17 +1,23 @@
-export function markOwn(entryId) {
+// Cached Set. Old code ran JSON.parse(localStorage) per entry per render.
+let cache = null;
+
+function read() {
+  if (cache) return cache;
   try {
-    const raw = window.localStorage.getItem("pasty-own") || "[]";
-    const list = JSON.parse(raw);
-    list.push(String(entryId));
-    window.localStorage.setItem("pasty-own", JSON.stringify(list.slice(-200)));
+    cache = new Set((JSON.parse(window.localStorage.getItem("pasty-own") || "[]") || []).map(String));
+  } catch {
+    cache = new Set();
+  }
+  return cache;
+}
+
+export function markOwn(entryId) {
+  read().add(String(entryId));
+  try {
+    window.localStorage.setItem("pasty-own", JSON.stringify([...read()].slice(-200)));
   } catch {}
 }
 
 export function isOwn(entryId) {
-  try {
-    const raw = window.localStorage.getItem("pasty-own") || "[]";
-    return JSON.parse(raw).includes(String(entryId));
-  } catch {
-    return false;
-  }
+  return read().has(String(entryId));
 }

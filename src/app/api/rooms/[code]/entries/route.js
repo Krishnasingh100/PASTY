@@ -51,11 +51,11 @@ export async function POST(req, { params }) {
     ];
     if (rows.length > 0) await db.insert(roomAttachments).values(rows);
 
-    await db
+    const updated = await db
       .update(rooms)
       .set({ totalSize: sql`${rooms.totalSize} + ${totalSize}` })
-      .where(eq(rooms.code, room.code));
-    const updated = await db.select({ totalSize: rooms.totalSize }).from(rooms).where(eq(rooms.code, room.code));
+      .where(eq(rooms.code, room.code))
+      .returning({ totalSize: rooms.totalSize });
 
     return Response.json(
       {

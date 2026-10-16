@@ -26,8 +26,10 @@ export async function DELETE(req, { params }) {
       return Response.json({ success: false, message: "Message not found" }, { status: 404 });
     }
     const freed = rows[0].entrySize || 0;
-    await db.delete(roomAttachments).where(eq(roomAttachments.entryId, id));
-    await db.delete(roomEntries).where(eq(roomEntries.id, id));
+    await Promise.all([
+      db.delete(roomAttachments).where(eq(roomAttachments.entryId, id)),
+      db.delete(roomEntries).where(eq(roomEntries.id, id)),
+    ]);
     if (freed > 0) {
       await db
         .update(rooms)

@@ -54,8 +54,10 @@ export async function DELETE(req, { params }) {
     }
     const db = getDb();
     const key = id.toLowerCase();
-    await db.delete(gistAttachments).where(eq(gistAttachments.gistId, key));
-    const deleted = await db.delete(gists).where(eq(gists.id, key)).returning({ id: gists.id });
+    const [, deleted] = await Promise.all([
+      db.delete(gistAttachments).where(eq(gistAttachments.gistId, key)),
+      db.delete(gists).where(eq(gists.id, key)).returning({ id: gists.id }),
+    ]);
     if (deleted.length === 0) {
       return Response.json({ success: false, message: "Paste not found or expired" }, { status: 404 });
     }

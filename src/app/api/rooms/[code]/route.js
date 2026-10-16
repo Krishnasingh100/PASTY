@@ -135,8 +135,10 @@ export async function DELETE(req, { params }) {
       .where(eq(roomEntries.roomCode, key));
     const entryIds = entries.map((e) => e.id);
     if (entryIds.length > 0) {
-      await db.delete(roomAttachments).where(inArray(roomAttachments.entryId, entryIds));
-      await db.delete(roomEntries).where(inArray(roomEntries.id, entryIds));
+      await Promise.all([
+        db.delete(roomAttachments).where(inArray(roomAttachments.entryId, entryIds)),
+        db.delete(roomEntries).where(inArray(roomEntries.id, entryIds)),
+      ]);
     }
     const deleted = await db.delete(rooms).where(eq(rooms.code, key)).returning({ code: rooms.code });
     if (deleted.length === 0) {
