@@ -13,5 +13,8 @@
 # logs
 npm-debug.log*
 
+# local explain doc - never push
+explainreadme.md
+
 # system
 .DS_Store

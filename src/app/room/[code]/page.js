@@ -13,6 +13,7 @@ import { tryFormat } from "@/lib/formatCode.js";
 import { addVisited, pingLists } from "@/lib/visited.js";
 import CodeBlock from "@/components/CodeBlock.jsx";
 import Composer from "@/components/Composer.jsx";
+import FileBubble from "@/components/FileBubble.jsx";
 import IdBox from "@/components/IdBox.jsx";
 import Lightbox from "@/components/Lightbox.jsx";
 
